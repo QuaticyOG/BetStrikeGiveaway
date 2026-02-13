@@ -26,6 +26,21 @@ function buildCommands() {
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     new SlashCommandBuilder()
+      .setName("resetwinners")
+      .setDescription("Reset winners (admin only)")
+      .addStringOption(o =>
+      o.setName("scope")
+      .setDescription("Reset scope")
+      .setRequired(false)
+      .addChoices(
+        { name: "today", value: "today" },
+        { name: "all", value: "all" }
+      )
+  )
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+    
+    new SlashCommandBuilder()
       .setName("drawnow")
       .setDescription("Draw a random eligible winner right now (admin only)")
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
