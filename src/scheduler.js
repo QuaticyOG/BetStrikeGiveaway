@@ -2,25 +2,48 @@ const cfg = require("./config");
 const { pickWinner, getOrCreateConfig } = require("./giveaway");
 
 /**
- * Pick a random timestamp inside a UTC hour window for TODAY.
+ * Get a Date representing "now" in Europe/Oslo timezone.
  */
-function randomTimeInWindow(startHour, endHour) {
-  const now = new Date();
+function nowInOslo() {
+  return new Date(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/Oslo",
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    }).format(new Date())
+  );
+}
 
-  const start = new Date(now);
-  start.setUTCHours(startHour, 0, 0, 0);
+/**
+ * Convert an Oslo-local time (hour range today) → real UTC Date.
+ */
+function randomUtcFromOsloWindow(startHour, endHour) {
+  const osloNow = nowInOslo();
 
-  const end = new Date(now);
-  end.setUTCHours(endHour, 0, 0, 0);
+  const start = new Date(osloNow);
+  start.setHours(startHour, 0, 0, 0);
+
+  const end = new Date(osloNow);
+  end.setHours(endHour, 0, 0, 0);
 
   const diff = end.getTime() - start.getTime();
   const offset = Math.floor(Math.random() * diff);
 
-  return new Date(start.getTime() + offset);
+  const osloRandom = new Date(start.getTime() + offset);
+
+  // Convert that Oslo-local time back to real UTC timestamp
+  return new Date(
+    new Date(osloRandom).toLocaleString("en-US", { timeZone: "UTC" })
+  );
 }
 
 /**
- * Schedule today's draws — exactly ONE per window.
+ * Schedule exactly ONE draw per configured Oslo window.
  */
 async function scheduleToday(client, guild) {
   const conf = await getOrCreateConfig(guild.id);
@@ -31,19 +54,18 @@ async function scheduleToday(client, guild) {
 
   const windows = cfg.TIME_WINDOWS;
 
-  console.log(`[SCHEDULER] Scheduling ${windows.length} winners for today...`);
+  console.log(`[SCHEDULER] Scheduling ${windows.length} winners for today (Europe/Oslo)...`);
 
   for (const window of windows) {
-    const drawTime = randomTimeInWindow(window.startHour, window.endHour);
-    const delay = drawTime.getTime() - Date.now();
+    const drawTimeUtc = randomUtcFromOsloWindow(window.startHour, window.endHour);
+    const delay = drawTimeUtc.getTime() - Date.now();
 
-    // Skip past times (e.g., bot restarted late)
     if (delay <= 0) {
-      console.log(`[SCHEDULER] Skipping past window draw at ${drawTime.toISOString()}`);
+      console.log(`[SCHEDULER] Skipping past draw ${drawTimeUtc.toISOString()}`);
       continue;
     }
 
-    console.log(`[SCHEDULER] Next draw scheduled at ${drawTime.toISOString()}`);
+    console.log(`[SCHEDULER] Next draw at ${drawTimeUtc.toISOString()} (UTC)`);
 
     const timer = setTimeout(async () => {
       try {
@@ -59,8 +81,7 @@ async function scheduleToday(client, guild) {
 }
 
 /**
- * Start daily scheduler loop.
- * Re-schedules every 24h at midnight UTC.
+ * Start daily scheduler loop (reschedules every midnight Oslo time).
  */
 async function startScheduler(client) {
   const guild = client.guilds.cache.get(cfg.GUILD_ID);
@@ -69,21 +90,25 @@ async function startScheduler(client) {
     return;
   }
 
-  // Schedule immediately for today
   await scheduleToday(client, guild);
 
-  // Calculate ms until next midnight UTC
-  const now = new Date();
-  const nextMidnight = new Date(now);
-  nextMidnight.setUTCHours(24, 0, 0, 0);
+  // Calculate next midnight in Oslo timezone
+  const osloNow = nowInOslo();
+  const nextMidnightOslo = new Date(osloNow);
+  nextMidnightOslo.setDate(nextMidnightOslo.getDate() + 1);
+  nextMidnightOslo.setHours(0, 0, 0, 0);
 
-  const msUntilMidnight = nextMidnight.getTime() - now.getTime();
+  const nextMidnightUtc = new Date(
+    nextMidnightOslo.toLocaleString("en-US", { timeZone: "UTC" })
+  );
 
-  console.log(`[SCHEDULER] Rescheduling in ${(msUntilMidnight / 1000 / 60).toFixed(2)} minutes`);
+  const msUntilNext = nextMidnightUtc.getTime() - Date.now();
 
-  setTimeout(async () => {
-    await startScheduler(client); // loop daily
-  }, msUntilMidnight);
+  console.log(
+    `[SCHEDULER] Rescheduling in ${(msUntilNext / 1000 / 60).toFixed(2)} minutes (next Oslo midnight)`
+  );
+
+  setTimeout(() => startScheduler(client), msUntilNext);
 }
 
 module.exports = {
