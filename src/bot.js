@@ -4,7 +4,7 @@ const cfg = require("./config");
 const db = require("./db");
 const { registerCommands } = require("./commands");
 const { startScheduler, scheduleToday } = require("./scheduler");
-const { setGiveawaysRunning, setGiveawayChannel, setWinnersLogChannel, pickWinner, getOrCreateConfig } = require("./giveaway");
+const { setGiveawaysRunning, setGiveawayChannel, resetWinners, setWinnersLogChannel, pickWinner, getOrCreateConfig } = require("./giveaway");
 
 const client = new Client({
   intents: [
@@ -77,6 +77,16 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: "✅ Giveaways started.", ephemeral: true });
     }
 
+    if (name === "resetwinners") {
+      const scope = interaction.options.getString("scope") || "today";
+      const res = await resetWinners(guild.id, scope);
+
+      return interaction.reply({
+    content: `✅ Winners reset (${res.deleted}). You can now redo testing.`,
+    ephemeral: true
+  });
+}
+    
     if (name === "setwinnerslog") {
       const channel = interaction.options.getChannel("channel");
       await setWinnersLogChannel(guild.id, channel.id);
