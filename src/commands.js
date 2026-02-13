@@ -1,0 +1,43 @@
+const { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
+const cfg = require("./config");
+
+function buildCommands() {
+  return [
+    new SlashCommandBuilder()
+      .setName("startgiveaways")
+      .setDescription("Start the giveaways (admin only)")
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+    new SlashCommandBuilder()
+      .setName("stopgiveaways")
+      .setDescription("Stop the giveaways (admin only)")
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+    new SlashCommandBuilder()
+      .setName("setgiveawaychannel")
+      .setDescription("Set the channel where winners are posted (admin only)")
+      .addChannelOption(o => o.setName("channel").setDescription("Channel").setRequired(true))
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+    new SlashCommandBuilder()
+      .setName("drawnow")
+      .setDescription("Draw a random eligible winner right now (admin only)")
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+  ].map(c => c.toJSON());
+}
+
+async function registerCommands(client) {
+  const rest = new REST({ version: "10" }).setToken(cfg.BOT_TOKEN);
+
+  // If you provided GUILD_ID, register as guild commands (instant updates).
+  // Otherwise register globally (can take time to propagate).
+  if (cfg.GUILD_ID) {
+    await rest.put(Routes.applicationGuildCommands(client.user.id, cfg.GUILD_ID), { body: buildCommands() });
+    console.log("✅ Slash commands registered (guild)");
+  } else {
+    await rest.put(Routes.applicationCommands(client.user.id), { body: buildCommands() });
+    console.log("✅ Slash commands registered (global)");
+  }
+}
+
+module.exports = { registerCommands };
