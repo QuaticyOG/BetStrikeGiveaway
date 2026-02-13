@@ -1,0 +1,13 @@
+{
+  "name": "betstrike-giveaway-bot",
+  "version": "1.0.0",
+  "main": "src/bot.js",
+  "scripts": {
+    "start": "node src/bot.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.0",
+    "dotenv": "^16.4.1",
+    "ms": "^2.1.3"
+  }
+}
