@@ -25,11 +25,24 @@ async function setGiveawaysRunning(guildId, running) {
   );
 }
 
-async function resetWinners(guildId, scope = "today") {
+async function resetWinners(guildId, scope = "today", winDateUTC = null) {
   if (scope === "all") {
-    await db.query("DELETE FROM daily_winners WHERE guild_id=$1", [guildId]);
-    return { deleted: "all" };
+    const res = await db.query("DELETE FROM daily_winners WHERE guild_id=$1", [guildId]);
+    return { deleted: "all", rows: res.rowCount };
   }
+
+  // default: today (but using the bot's UTC date, not DB CURRENT_DATE)
+  if (!winDateUTC) {
+    throw new Error("winDateUTC is required for scope=today");
+  }
+
+  const res = await db.query(
+    "DELETE FROM daily_winners WHERE guild_id=$1 AND win_date=$2::date",
+    [guildId, winDateUTC]
+  );
+
+  return { deleted: "today", rows: res.rowCount, winDateUTC };
+}
 
   // default: today
   await db.query("DELETE FROM daily_winners WHERE guild_id=$1 AND win_date=CURRENT_DATE", [guildId]);
