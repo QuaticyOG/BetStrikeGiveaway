@@ -1,50 +1,83 @@
 const cfg = require("./config");
 const { pickWinner, getOrCreateConfig } = require("./giveaway");
 
-/**
- * Get a Date representing "now" in Europe/Oslo timezone.
- */
-function nowInOslo() {
-  return new Date(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: "Europe/Oslo",
-      hour12: false,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit"
-    }).format(new Date())
-  );
+const TZ = "Europe/Oslo";
+
+function getOsloYMD(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+
+  const y = parts.find(p => p.type === "year").value;
+  const m = parts.find(p => p.type === "month").value;
+  const d = parts.find(p => p.type === "day").value;
+  return { y, m, d };
 }
 
 /**
- * Convert an Oslo-local time (hour range today) → real UTC Date.
+ * Returns the timezone offset (minutes) between UTC and TZ at a given UTC instant.
+ * Positive means TZ is ahead of UTC (Oslo is +60 or +120 depending on DST).
  */
-function randomUtcFromOsloWindow(startHour, endHour) {
-  const osloNow = nowInOslo();
+function tzOffsetMinutesAt(utcDate, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).formatToParts(utcDate);
 
-  const start = new Date(osloNow);
-  start.setHours(startHour, 0, 0, 0);
+  const get = (t) => parts.find(p => p.type === t).value;
 
-  const end = new Date(osloNow);
-  end.setHours(endHour, 0, 0, 0);
-
-  const diff = end.getTime() - start.getTime();
-  const offset = Math.floor(Math.random() * diff);
-
-  const osloRandom = new Date(start.getTime() + offset);
-
-  // Convert that Oslo-local time back to real UTC timestamp
-  return new Date(
-    new Date(osloRandom).toLocaleString("en-US", { timeZone: "UTC" })
+  // This is the "same instant" rendered in the target timezone, but we interpret it as UTC
+  const asIfUtc = Date.UTC(
+    Number(get("year")),
+    Number(get("month")) - 1,
+    Number(get("day")),
+    Number(get("hour")),
+    Number(get("minute")),
+    Number(get("second"))
   );
+
+  return (asIfUtc - utcDate.getTime()) / 60000;
 }
 
 /**
- * Schedule exactly ONE draw per configured Oslo window.
+ * Build a real UTC Date for a given Oslo-local date+time.
  */
+function utcFromOsloLocal(y, m, d, hour, minute, second = 0) {
+  // Start with a guess assuming the local time is UTC (we'll correct using the offset)
+  const guessUtc = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d), hour, minute, second));
+
+  // Determine Oslo offset at that instant
+  const offsetMin = tzOffsetMinutesAt(guessUtc, TZ);
+
+  // If Oslo is ahead of UTC by +60, then local 09:00 happens at 08:00 UTC (subtract 60 minutes)
+  return new Date(guessUtc.getTime() - offsetMin * 60000);
+}
+
+function randomUtcInOsloWindow(startHour, endHour) {
+  const { y, m, d } = getOsloYMD(new Date());
+
+  // pick random minute/second inside window
+  const startMin = startHour * 60;
+  const endMin = endHour * 60;
+  const r = Math.floor(Math.random() * (endMin - startMin));
+  const totalMin = startMin + r;
+
+  const hour = Math.floor(totalMin / 60);
+  const minute = totalMin % 60;
+  const second = Math.floor(Math.random() * 60);
+
+  return utcFromOsloLocal(y, m, d, hour, minute, second);
+}
+
 async function scheduleToday(client, guild) {
   const conf = await getOrCreateConfig(guild.id);
   if (!conf.giveaways_running) {
@@ -52,12 +85,12 @@ async function scheduleToday(client, guild) {
     return;
   }
 
-  const windows = cfg.TIME_WINDOWS;
+  const windows = cfg.TIME_WINDOWS; // you will set these in Oslo-local hours: 9-12 and 19-23
 
-  console.log(`[SCHEDULER] Scheduling ${windows.length} winners for today (Europe/Oslo)...`);
+  console.log(`[SCHEDULER] Scheduling ${windows.length} winners for today (${TZ})...`);
 
-  for (const window of windows) {
-    const drawTimeUtc = randomUtcFromOsloWindow(window.startHour, window.endHour);
+  for (const w of windows) {
+    const drawTimeUtc = randomUtcInOsloWindow(w.startHour, w.endHour);
     const delay = drawTimeUtc.getTime() - Date.now();
 
     if (delay <= 0) {
@@ -80,9 +113,17 @@ async function scheduleToday(client, guild) {
   }
 }
 
-/**
- * Start daily scheduler loop (reschedules every midnight Oslo time).
- */
+function nextOsloMidnightUtc() {
+  const now = new Date();
+  const { y, m, d } = getOsloYMD(now);
+
+  // Build Oslo-local "tomorrow 00:00"
+  // To get tomorrow, we can take "today 00:00 Oslo" then add 24h in Oslo terms by creating UTC from local
+  // simpler: create UTC from Oslo local for today 00:00, then add 24h
+  const todayMidnightUtc = utcFromOsloLocal(y, m, d, 0, 0, 0);
+  return new Date(todayMidnightUtc.getTime() + 24 * 60 * 60 * 1000);
+}
+
 async function startScheduler(client) {
   const guild = client.guilds.cache.get(cfg.GUILD_ID);
   if (!guild) {
@@ -92,26 +133,14 @@ async function startScheduler(client) {
 
   await scheduleToday(client, guild);
 
-  // Calculate next midnight in Oslo timezone
-  const osloNow = nowInOslo();
-  const nextMidnightOslo = new Date(osloNow);
-  nextMidnightOslo.setDate(nextMidnightOslo.getDate() + 1);
-  nextMidnightOslo.setHours(0, 0, 0, 0);
-
-  const nextMidnightUtc = new Date(
-    nextMidnightOslo.toLocaleString("en-US", { timeZone: "UTC" })
-  );
-
-  const msUntilNext = nextMidnightUtc.getTime() - Date.now();
+  const nextMidnightUtc = nextOsloMidnightUtc();
+  const ms = nextMidnightUtc.getTime() - Date.now();
 
   console.log(
-    `[SCHEDULER] Rescheduling in ${(msUntilNext / 1000 / 60).toFixed(2)} minutes (next Oslo midnight)`
+    `[SCHEDULER] Rescheduling in ${(ms / 1000 / 60).toFixed(2)} minutes (next Oslo midnight)`
   );
 
-  setTimeout(() => startScheduler(client), msUntilNext);
+  setTimeout(() => startScheduler(client), ms);
 }
 
-module.exports = {
-  startScheduler,
-  scheduleToday
-};
+module.exports = { startScheduler, scheduleToday };
