@@ -4,7 +4,7 @@ const db = require("./db");
 const cfg = require("./config");
 const { isEligible } = require("./eligibility");
 
-function todayISODate() {
+function todayISODateUTC() {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
 }
 
@@ -25,30 +25,6 @@ async function setGiveawaysRunning(guildId, running) {
   );
 }
 
-async function resetWinners(guildId, scope = "today", winDateUTC = null) {
-  if (scope === "all") {
-    const res = await db.query("DELETE FROM daily_winners WHERE guild_id=$1", [guildId]);
-    return { deleted: "all", rows: res.rowCount };
-  }
-
-  // default: today (but using the bot's UTC date, not DB CURRENT_DATE)
-  if (!winDateUTC) {
-    throw new Error("winDateUTC is required for scope=today");
-  }
-
-  const res = await db.query(
-    "DELETE FROM daily_winners WHERE guild_id=$1 AND win_date=$2::date",
-    [guildId, winDateUTC]
-  );
-
-  return { deleted: "today", rows: res.rowCount, winDateUTC };
-}
-
-  // default: today
-  await db.query("DELETE FROM daily_winners WHERE guild_id=$1 AND win_date=CURRENT_DATE", [guildId]);
-  return { deleted: "today" };
-}
-
 async function setGiveawayChannel(guildId, channelId) {
   await db.query(
     "INSERT INTO bot_config (guild_id, giveaway_channel_id) VALUES ($1, $2) " +
@@ -57,7 +33,6 @@ async function setGiveawayChannel(guildId, channelId) {
   );
 }
 
-// ✅ new: winners log channel setter (stored in bot_config.log_channel_id)
 async function setWinnersLogChannel(guildId, channelId) {
   await db.query(
     "INSERT INTO bot_config (guild_id, log_channel_id) VALUES ($1, $2) " +
@@ -71,15 +46,14 @@ function findEligibleRole(guild) {
   return guild.roles.cache.find((r) => r.name === cfg.ELIGIBLE_ROLE_NAME) || null;
 }
 
-async function hasWonToday(guildId, userId, winDate) {
+async function hasWonToday(guildId, userId, winDateUTC) {
   const res = await db.query(
-    "SELECT 1 FROM daily_winners WHERE guild_id=$1 AND user_id=$2 AND win_date=$3",
-    [guildId, userId, winDate]
+    "SELECT 1 FROM daily_winners WHERE guild_id=$1 AND user_id=$2 AND win_date=$3::date",
+    [guildId, userId, winDateUTC]
   );
   return res.rowCount > 0;
 }
 
-// ✅ cooldown check: blocked if they have a win in last N days
 async function hasWonWithinCooldown(guildId, userId, cooldownDays) {
   if (!cooldownDays || cooldownDays <= 0) return false;
 
@@ -94,19 +68,39 @@ async function hasWonWithinCooldown(guildId, userId, cooldownDays) {
     `,
     [guildId, userId, cooldownDays]
   );
+
   return res.rowCount > 0;
+}
+
+/**
+ * Reset winners for testing.
+ * - scope "today": deletes rows where win_date matches today's UTC date (same as the bot stores)
+ * - scope "all": deletes all winners for that guild
+ */
+async function resetWinners(guildId, scope = "today") {
+  if (scope === "all") {
+    const res = await db.query("DELETE FROM daily_winners WHERE guild_id=$1", [guildId]);
+    return { deleted: "all", rows: res.rowCount };
+  }
+
+  const winDateUTC = todayISODateUTC();
+  const res = await db.query(
+    "DELETE FROM daily_winners WHERE guild_id=$1 AND win_date=$2::date",
+    [guildId, winDateUTC]
+  );
+  return { deleted: "today", rows: res.rowCount, winDateUTC };
 }
 
 async function pickWinner(client, guild) {
   const conf = await getOrCreateConfig(guild.id);
   if (!conf.giveaways_running) return { winner: null, reason: "Giveaways are stopped." };
 
-  const winDate = todayISODate();
+  const winDateUTC = todayISODateUTC();
 
   const role = findEligibleRole(guild);
   if (!role) return { winner: null, reason: "Eligible role not found. Check ELIGIBLE_ROLE_ID." };
 
-  // cache warm if role.members isn't populated yet
+  // Cache warm if role.members isn't populated yet
   if (role.members.size === 0) {
     if (client._lastMemberChunkAt && Date.now() - client._lastMemberChunkAt < 30_000) {
       return { winner: null, reason: "Member cache warming up. Try again in ~30 seconds." };
@@ -121,12 +115,12 @@ async function pickWinner(client, guild) {
   }
 
   console.log(
-    `[DRAW] Guild=${guild.id} Role=${role.name} RoleMembers=${role.members.size} Date=${winDate}`
+    `[DRAW] Guild=${guild.id} Role=${role.name} RoleMembers=${role.members.size} Date=${winDateUTC}`
   );
 
   const eligible = [];
   for (const [, member] of role.members) {
-    if (await hasWonToday(guild.id, member.id, winDate)) continue;
+    if (await hasWonToday(guild.id, member.id, winDateUTC)) continue;
     if (await hasWonWithinCooldown(guild.id, member.id, cfg.WIN_COOLDOWN_DAYS)) continue;
     if (await isEligible(member)) eligible.push(member);
   }
@@ -137,13 +131,13 @@ async function pickWinner(client, guild) {
 
   const winner = eligible[Math.floor(Math.random() * eligible.length)];
 
-  // record winner
+  // record winner (prevents same-day duplicates)
   await db.query(
-    "INSERT INTO daily_winners (guild_id, user_id, win_date) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-    [guild.id, winner.id, winDate]
+    "INSERT INTO daily_winners (guild_id, user_id, win_date) VALUES ($1, $2, $3::date) ON CONFLICT DO NOTHING",
+    [guild.id, winner.id, winDateUTC]
   );
 
-  // public winner channel
+  // Public winner channel
   const publicChannelId = conf.giveaway_channel_id;
   const publicChannel = publicChannelId ? guild.channels.cache.get(publicChannelId) : null;
 
@@ -157,7 +151,7 @@ async function pickWinner(client, guild) {
     await publicChannel.send({ embeds: [embed] });
   }
 
-  // staff log channel (set via /setwinnerslog)
+  // Staff log channel
   const logChannelId = conf.log_channel_id;
   const logChannel = logChannelId ? guild.channels.cache.get(logChannelId) : null;
 
@@ -167,7 +161,7 @@ async function pickWinner(client, guild) {
       .setTitle("🧾 Winners Log")
       .setDescription(`Winner: <@${winner.id}>`)
       .addFields(
-        { name: "Date (UTC)", value: winDate, inline: true },
+        { name: "Date (UTC)", value: winDateUTC, inline: true },
         { name: "Cooldown days", value: String(cfg.WIN_COOLDOWN_DAYS), inline: true },
         { name: "Role", value: `${role.name} (${role.id})`, inline: false }
       )
