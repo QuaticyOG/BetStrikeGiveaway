@@ -1,109 +1,115 @@
 require("dotenv").config();
-const { Client, GatewayIntentBits, Partials, REST, Routes, SlashCommandBuilder } = require("discord.js");
-const scheduleGiveaways = require("./scheduler");
-const { log } = require("./utils");
+const { Client, GatewayIntentBits, Partials } = require("discord.js");
+const cfg = require("./config");
+const db = require("./db");
+const { registerCommands } = require("./commands");
+const { startScheduler, scheduleToday } = require("./scheduler");
+const { setGiveawaysRunning, setGiveawayChannel, pickWinner, getOrCreateConfig } = require("./giveaway");
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ],
-    partials: [Partials.Channel]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ],
+  partials: [Partials.Channel]
 });
 
-// Configuration
-client.config = {
-    ELIGIBLE_ROLE_NAME: process.env.ELIGIBLE_ROLE_NAME,
-    ELIGIBLE_ROLE_ID: process.env.ELIGIBLE_ROLE_ID,
-    MIN_MESSAGES: Number(process.env.MIN_MESSAGES),
-    MIN_LEVEL: Number(process.env.MIN_LEVEL),
-    MIN_DAYS_IN_SERVER: Number(process.env.MIN_DAYS_IN_SERVER),
-    MIN_ACCOUNT_AGE_DAYS: Number(process.env.MIN_ACCOUNT_AGE_DAYS),
-    WINNERS_PER_DAY: Number(process.env.WINNERS_PER_DAY),
-    GIVEAWAY_CHANNEL_LOG: process.env.GIVEAWAY_CHANNEL_LOG,
-    RANDOM_TIME_WINDOWS: JSON.parse(process.env.RANDOM_TIME_WINDOWS),
-    GIVEAWAY_MESSAGE: process.env.GIVEAWAY_MESSAGE,
-    GIVEAWAY_COLOR: process.env.GIVEAWAY_COLOR || "#9e6bff"
-};
+client._timers = [];
 
-// Track winners per day and giveaway state
-client.dailyWinners = new Set();
-client.giveawaysRunning = true;
-client.schedulerTimeouts = [];
-
-// Ready
 client.once("ready", async () => {
-    console.log(`Logged in as ${client.user.tag}`);
-    scheduleGiveaways(client);
-    registerCommands();
+  console.log(`Logged in as ${client.user.tag}`);
+
+  // Ensure tables exist (safe to run every boot)
+  // If you prefer, run `npm run db:init` instead.
+  const fs = require("fs");
+  const path = require("path");
+  const schema = fs.readFileSync(path.join(process.cwd(), "sql", "schema.sql"), "utf8");
+  await db.query(schema);
+
+  await registerCommands(client);
+
+  // Start scheduler
+  await startScheduler(client);
+
+  console.log("✅ Scheduler running");
 });
 
-// LOGIN
-client.login(process.env.BOT_TOKEN);
+// Track messages live for accurate MIN_MESSAGES
+client.on("messageCreate", async (msg) => {
+  try {
+    if (!msg.guild) return;
+    if (msg.author.bot) return;
 
-// ------------------
-// SLASH COMMANDS
-// ------------------
-async function registerCommands() {
-    const commands = [
-        new SlashCommandBuilder()
-            .setName("stopgiveaways")
-            .setDescription("Stop the scheduled giveaways"),
-        new SlashCommandBuilder()
-            .setName("startgiveaways")
-            .setDescription("Start the giveaways again"),
-        new SlashCommandBuilder()
-            .setName("setgiveawaychannel")
-            .setDescription("Set the channel where winners are announced")
-            .addChannelOption(option =>
-                option.setName("channel")
-                    .setDescription("Select the channel")
-                    .setRequired(true)
-            )
-    ].map(cmd => cmd.toJSON());
-
-    const rest = new REST({ version: "10" }).setToken(process.env.BOT_TOKEN);
-
-    await rest.put(
-        Routes.applicationCommands(client.user.id),
-        { body: commands }
+    await db.query(
+      "INSERT INTO message_counts (guild_id, user_id, count) VALUES ($1,$2,1) " +
+      "ON CONFLICT (guild_id, user_id) DO UPDATE SET count = message_counts.count + 1, updated_at=NOW()",
+      [msg.guild.id, msg.author.id]
     );
+  } catch (e) {
+    console.error("messageCreate tracking error:", e);
+  }
+});
 
-    console.log("Slash commands registered");
-}
-
-// ------------------
-// INTERACTION HANDLER
-// ------------------
-client.on("interactionCreate", async interaction => {
+client.on("interactionCreate", async (interaction) => {
+  try {
     if (!interaction.isChatInputCommand()) return;
 
-    if (!interaction.member.permissions.has("Administrator")) {
-        return interaction.reply({ content: "You need admin permissions!", ephemeral: true });
+    const guild = interaction.guild;
+    if (!guild) return;
+
+    const name = interaction.commandName;
+
+    if (name === "stopgiveaways") {
+      await setGiveawaysRunning(guild.id, false);
+
+      // Stop any currently scheduled timeouts
+      for (const t of client._timers) clearTimeout(t);
+      client._timers = [];
+
+      return interaction.reply({ content: "✅ Giveaways stopped.", ephemeral: true });
     }
 
-    const { commandName } = interaction;
-
-    if (commandName === "stopgiveaways") {
-        client.giveawaysRunning = false;
-        // Clear any pending timeouts
-        client.schedulerTimeouts.forEach(t => clearTimeout(t));
-        client.schedulerTimeouts = [];
-        return interaction.reply("✅ Giveaways stopped!");
+    if (name === "startgiveaways") {
+      await setGiveawaysRunning(guild.id, true);
+      await scheduleToday(client, guild);
+      return interaction.reply({ content: "✅ Giveaways started.", ephemeral: true });
     }
 
-    if (commandName === "startgiveaways") {
-        if (client.giveawaysRunning) return interaction.reply("Giveaways are already running!");
-        client.giveawaysRunning = true;
-        require("./scheduler")(client); // restart scheduling
-        return interaction.reply("✅ Giveaways started!");
+    if (name === "setgiveawaychannel") {
+      const channel = interaction.options.getChannel("channel");
+      await setGiveawayChannel(guild.id, channel.id);
+      return interaction.reply({ content: `✅ Giveaway channel set to ${channel}.`, ephemeral: true });
     }
 
-    if (commandName === "setgiveawaychannel") {
-        const channel = interaction.options.getChannel("channel");
-        client.config.GIVEAWAY_CHANNEL_LOG = channel.id;
-        return interaction.reply(`✅ Giveaway channel set to ${channel}`);
+    if (name === "drawnow") {
+      // still respects eligibility + "no duplicate winner today"
+      await interaction.reply({ content: "🎲 Drawing a winner now...", ephemeral: true });
+
+      const conf = await getOrCreateConfig(guild.id);
+      if (!conf.giveaway_channel_id) {
+        return interaction.followUp({
+          content: "⚠️ No giveaway channel set. Use /setgiveawaychannel first.",
+          ephemeral: true
+        });
+      }
+
+      const result = await pickWinner(client, guild);
+      if (!result.winner) {
+        return interaction.followUp({ content: `No winner drawn: ${result.reason}`, ephemeral: true });
+      }
+
+      return interaction.followUp({ content: `✅ Winner drawn: <@${result.winner.id}>`, ephemeral: true });
     }
+  } catch (e) {
+    console.error("interactionCreate error:", e);
+    if (interaction?.isRepliable()) {
+      try {
+        await interaction.reply({ content: "❌ Something went wrong handling that command.", ephemeral: true });
+      } catch {}
+    }
+  }
 });
+
+client.login(cfg.BOT_TOKEN);
