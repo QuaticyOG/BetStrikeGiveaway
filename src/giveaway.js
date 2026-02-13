@@ -2,11 +2,10 @@
 const { EmbedBuilder } = require("discord.js");
 const db = require("./db");
 const cfg = require("./config");
-const { isEligible, hasWonToday } = require("./eligibility");
+const { isEligible } = require("./eligibility");
 
 function todayISODate() {
-  // YYYY-MM-DD in UTC
-  return new Date().toISOString().slice(0, 10);
+  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
 }
 
 async function getOrCreateConfig(guildId) {
@@ -34,13 +33,44 @@ async function setGiveawayChannel(guildId, channelId) {
   );
 }
 
+// ✅ new: winners log channel setter (stored in bot_config.log_channel_id)
+async function setWinnersLogChannel(guildId, channelId) {
+  await db.query(
+    "INSERT INTO bot_config (guild_id, log_channel_id) VALUES ($1, $2) " +
+      "ON CONFLICT (guild_id) DO UPDATE SET log_channel_id=EXCLUDED.log_channel_id, updated_at=NOW()",
+    [guildId, channelId]
+  );
+}
+
 function findEligibleRole(guild) {
-  // ✅ Prefer explicit role ID if present
-  if (cfg.ELIGIBLE_ROLE_ID) {
-    return guild.roles.cache.get(cfg.ELIGIBLE_ROLE_ID) || null;
-  }
-  // fallback to name
+  if (cfg.ELIGIBLE_ROLE_ID) return guild.roles.cache.get(cfg.ELIGIBLE_ROLE_ID) || null;
   return guild.roles.cache.find((r) => r.name === cfg.ELIGIBLE_ROLE_NAME) || null;
+}
+
+async function hasWonToday(guildId, userId, winDate) {
+  const res = await db.query(
+    "SELECT 1 FROM daily_winners WHERE guild_id=$1 AND user_id=$2 AND win_date=$3",
+    [guildId, userId, winDate]
+  );
+  return res.rowCount > 0;
+}
+
+// ✅ cooldown check: blocked if they have a win in last N days
+async function hasWonWithinCooldown(guildId, userId, cooldownDays) {
+  if (!cooldownDays || cooldownDays <= 0) return false;
+
+  const res = await db.query(
+    `
+    SELECT 1
+    FROM daily_winners
+    WHERE guild_id = $1
+      AND user_id = $2
+      AND win_date >= (CURRENT_DATE - ($3::int * INTERVAL '1 day'))
+    LIMIT 1
+    `,
+    [guildId, userId, cooldownDays]
+  );
+  return res.rowCount > 0;
 }
 
 async function pickWinner(client, guild) {
@@ -49,40 +79,20 @@ async function pickWinner(client, guild) {
 
   const winDate = todayISODate();
 
-  // ✅ Only draw from members with eligible role (avoids scanning whole guild)
   const role = findEligibleRole(guild);
-  if (!role) {
-    return {
-      winner: null,
-      reason: `Eligible role not found. Set ELIGIBLE_ROLE_ID to your Striker role ID.`
-    };
-  }
+  if (!role) return { winner: null, reason: "Eligible role not found. Check ELIGIBLE_ROLE_ID." };
 
-  // If role.members is empty, members may not be cached yet.
-  // We do ONE controlled full fetch to warm cache, then rely on role.members.
+  // cache warm if role.members isn't populated yet
   if (role.members.size === 0) {
-    // avoid spamming gateway opcode 8 (Request Guild Members)
     if (client._lastMemberChunkAt && Date.now() - client._lastMemberChunkAt < 30_000) {
-      console.log(
-        `[DRAW] Cache warm blocked (cooldown). RoleMembers=${role.members.size} Guild=${guild.id}`
-      );
-      return {
-        winner: null,
-        reason: "Member cache warming up. Try again in ~30 seconds."
-      };
+      return { winner: null, reason: "Member cache warming up. Try again in ~30 seconds." };
     }
-
     client._lastMemberChunkAt = Date.now();
-    console.log(`[DRAW] Warming member cache via guild.members.fetch()...`);
-
     try {
       await guild.members.fetch();
     } catch (e) {
-      console.error("Member cache warm (guild.members.fetch) failed:", e);
-      return {
-        winner: null,
-        reason: "Discord rate limited member fetch. Try again in ~30 seconds."
-      };
+      console.error("Member cache warm failed:", e);
+      return { winner: null, reason: "Discord rate limited member fetch. Try again shortly." };
     }
   }
 
@@ -92,51 +102,55 @@ async function pickWinner(client, guild) {
 
   const eligible = [];
   for (const [, member] of role.members) {
-    // Prevent same-day duplicates
     if (await hasWonToday(guild.id, member.id, winDate)) continue;
-
-    // Apply all eligibility rules (role, join age, account age, messages, bot check)
+    if (await hasWonWithinCooldown(guild.id, member.id, cfg.WIN_COOLDOWN_DAYS)) continue;
     if (await isEligible(member)) eligible.push(member);
   }
 
   console.log(`[DRAW] EligibleAfterChecks=${eligible.length}`);
 
-  if (eligible.length === 0) {
-    return {
-      winner: null,
-      reason:
-        "No eligible members found. If you are sure users qualify: " +
-        "1) ensure message counts exist (counts since bot went live), " +
-        "2) ensure role members are cached (RoleMembers should be >0), " +
-        "3) verify MIN_DAYS_IN_SERVER / MIN_ACCOUNT_AGE_DAYS."
-    };
-  }
+  if (eligible.length === 0) return { winner: null, reason: "No eligible members found." };
 
   const winner = eligible[Math.floor(Math.random() * eligible.length)];
 
-  // Record winner for today (prevents same-day duplicate)
+  // record winner
   await db.query(
     "INSERT INTO daily_winners (guild_id, user_id, win_date) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
     [guild.id, winner.id, winDate]
   );
 
-  const channelId = conf.giveaway_channel_id;
-  const channel = channelId ? guild.channels.cache.get(channelId) : null;
+  // public winner channel
+  const publicChannelId = conf.giveaway_channel_id;
+  const publicChannel = publicChannelId ? guild.channels.cache.get(publicChannelId) : null;
 
-  if (!channel) {
-    return {
-      winner,
-      reason: "Winner picked, but no giveaway channel is set. Use /setgiveawaychannel."
-    };
+  if (publicChannel) {
+    const embed = new EmbedBuilder()
+      .setColor(cfg.GIVEAWAY_COLOR)
+      .setTitle("🎉 Giveaway Winner 🎉")
+      .setDescription(cfg.GIVEAWAY_MESSAGE.replace("{user}", `<@${winner.id}>`))
+      .setTimestamp();
+
+    await publicChannel.send({ embeds: [embed] });
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(cfg.GIVEAWAY_COLOR)
-    .setTitle("🎉 Giveaway Winner 🎉")
-    .setDescription(cfg.GIVEAWAY_MESSAGE.replace("{user}", `<@${winner.id}>`))
-    .setTimestamp();
+  // staff log channel (set via /setwinnerslog)
+  const logChannelId = conf.log_channel_id;
+  const logChannel = logChannelId ? guild.channels.cache.get(logChannelId) : null;
 
-  await channel.send({ embeds: [embed] });
+  if (logChannel) {
+    const logEmbed = new EmbedBuilder()
+      .setColor(cfg.GIVEAWAY_COLOR)
+      .setTitle("🧾 Winners Log")
+      .setDescription(`Winner: <@${winner.id}>`)
+      .addFields(
+        { name: "Date (UTC)", value: winDate, inline: true },
+        { name: "Cooldown days", value: String(cfg.WIN_COOLDOWN_DAYS), inline: true },
+        { name: "Role", value: `${role.name} (${role.id})`, inline: false }
+      )
+      .setTimestamp();
+
+    await logChannel.send({ embeds: [logEmbed] });
+  }
 
   return { winner, reason: null };
 }
@@ -145,5 +159,6 @@ module.exports = {
   getOrCreateConfig,
   setGiveawaysRunning,
   setGiveawayChannel,
+  setWinnersLogChannel,
   pickWinner
 };
