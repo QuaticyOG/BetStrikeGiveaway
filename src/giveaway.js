@@ -25,6 +25,17 @@ async function setGiveawaysRunning(guildId, running) {
   );
 }
 
+async function resetWinners(guildId, scope = "today") {
+  if (scope === "all") {
+    await db.query("DELETE FROM daily_winners WHERE guild_id=$1", [guildId]);
+    return { deleted: "all" };
+  }
+
+  // default: today
+  await db.query("DELETE FROM daily_winners WHERE guild_id=$1 AND win_date=CURRENT_DATE", [guildId]);
+  return { deleted: "today" };
+}
+
 async function setGiveawayChannel(guildId, channelId) {
   await db.query(
     "INSERT INTO bot_config (guild_id, giveaway_channel_id) VALUES ($1, $2) " +
