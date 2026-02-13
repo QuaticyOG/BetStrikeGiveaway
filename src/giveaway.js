@@ -171,5 +171,6 @@ module.exports = {
   setGiveawaysRunning,
   setGiveawayChannel,
   setWinnersLogChannel,
-  pickWinner
+  pickWinner,
+  resetWinners
 };
