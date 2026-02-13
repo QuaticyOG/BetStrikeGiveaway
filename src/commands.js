@@ -20,6 +20,12 @@ function buildCommands() {
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     new SlashCommandBuilder()
+      .setName("setwinnerslog")
+      .setDescription("Set the staff winners log channel (admin only)")
+      .addChannelOption(o => o.setName("channel").setDescription("Channel").setRequired(true))
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+    new SlashCommandBuilder()
       .setName("drawnow")
       .setDescription("Draw a random eligible winner right now (admin only)")
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
