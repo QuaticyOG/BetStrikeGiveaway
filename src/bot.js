@@ -77,14 +77,23 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: "✅ Giveaways started.", ephemeral: true });
     }
 
-    if (name === "resetwinners") {
-      const scope = interaction.options.getString("scope") || "today";
-      const res = await resetWinners(guild.id, scope);
+async function resetWinners(guildId, scope = "today", winDateUTC = null) {
+  if (scope === "all") {
+    const res = await db.query("DELETE FROM daily_winners WHERE guild_id=$1", [guildId]);
+    return { deleted: "all", rows: res.rowCount };
+  }
 
-      return interaction.reply({
-    content: `✅ Winners reset (${res.deleted}). You can now redo testing.`,
-    ephemeral: true
-  });
+  // default: today (but using the bot's UTC date, not DB CURRENT_DATE)
+  if (!winDateUTC) {
+    throw new Error("winDateUTC is required for scope=today");
+  }
+
+  const res = await db.query(
+    "DELETE FROM daily_winners WHERE guild_id=$1 AND win_date=$2::date",
+    [guildId, winDateUTC]
+  );
+
+  return { deleted: "today", rows: res.rowCount, winDateUTC };
 }
     
     if (name === "setwinnerslog") {
