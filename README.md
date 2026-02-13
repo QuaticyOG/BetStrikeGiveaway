@@ -4,7 +4,7 @@
 - Eligible winners must have the configured role (default: "striker")
 - Min messages, min server join days, min account age
 - Random draws inside daily time windows
-- No repeat winner in the same day
+- No repeat winner in the same day 
 - Embed announcement with custom message and color
 - Slash commands:
   - /startgiveaways
