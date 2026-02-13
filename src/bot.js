@@ -1,15 +1,28 @@
 require("dotenv").config();
+
 const { Client, GatewayIntentBits, Partials } = require("discord.js");
 const cfg = require("./config");
 const db = require("./db");
 const { registerCommands } = require("./commands");
-const { startScheduler, scheduleToday } = require("./scheduler");
-const { setGiveawaysRunning, setGiveawayChannel, resetWinners, setWinnersLogChannel, pickWinner, getOrCreateConfig } = require("./giveaway");
+const { startScheduler } = require("./scheduler");
 
+const {
+  setGiveawaysRunning,
+  setGiveawayChannel,
+  setWinnersLogChannel,
+  pickWinner,
+  resetWinners,
+  getOrCreateConfig
+} = require("./giveaway");
+
+
+// --------------------
+// Create Discord client
+// --------------------
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMembers,   // REQUIRED for role member detection
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
   ],
@@ -18,25 +31,65 @@ const client = new Client({
 
 client._timers = [];
 
+
+// --------------------
+// Global safety handlers (prevent Railway crash loops)
+// --------------------
+process.on("unhandledRejection", (err) => {
+  console.error("Unhandled promise rejection:", err);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught exception:", err);
+});
+
+
+// --------------------
+// Ready event
+// --------------------
 client.once("ready", async () => {
   console.log(`Logged in as ${client.user.tag}`);
 
-  // Ensure tables exist (safe to run every boot)
-  // If you prefer, run `npm run db:init` instead.
-  const fs = require("fs");
-  const path = require("path");
-  const schema = fs.readFileSync(path.join(process.cwd(), "sql", "schema.sql"), "utf8");
-  await db.query(schema);
+  try {
+    // Ensure DB schema exists
+    const fs = require("fs");
+    const path = require("path");
+    const schema = fs.readFileSync(path.join(process.cwd(), "sql", "schema.sql"), "utf8");
+    await db.query(schema);
 
-  await registerCommands(client);
+    // Register slash commands
+    await registerCommands(client);
 
-  // Start scheduler
-  await startScheduler(client);
+    // 🔥 DELAYED FULL MEMBER CACHE WARM (fixes missing role members)
+    setTimeout(async () => {
+      try {
+        const guild = client.guilds.cache.get(cfg.GUILD_ID);
+        if (!guild) {
+          console.log("Cache warm skipped: guild not found");
+          return;
+        }
 
-  console.log("✅ Scheduler running");
+        console.log("Warming full member cache...");
+        const members = await guild.members.fetch(); // fetch ALL members once
+        console.log(`Member cache ready: ${members.size} members`);
+      } catch (err) {
+        console.error("Member cache warm failed:", err.message);
+      }
+    }, 5000); // wait 5 seconds after ready
+
+    // Start giveaway scheduler
+    await startScheduler(client);
+    console.log("✅ Scheduler running");
+
+  } catch (err) {
+    console.error("Startup error:", err);
+  }
 });
 
-// Track messages live for accurate MIN_MESSAGES
+
+// --------------------
+// Track messages for MIN_MESSAGES requirement
+// --------------------
 client.on("messageCreate", async (msg) => {
   try {
     if (!msg.guild) return;
@@ -52,6 +105,10 @@ client.on("messageCreate", async (msg) => {
   }
 });
 
+
+// --------------------
+// Slash command handler
+// --------------------
 client.on("interactionCreate", async (interaction) => {
   try {
     if (!interaction.isChatInputCommand()) return;
@@ -61,49 +118,58 @@ client.on("interactionCreate", async (interaction) => {
 
     const name = interaction.commandName;
 
-    if (name === "stopgiveaways") {
-      await setGiveawaysRunning(guild.id, false);
-
-      // Stop any currently scheduled timeouts
-      for (const t of client._timers) clearTimeout(t);
-      client._timers = [];
-
-      return interaction.reply({ content: "✅ Giveaways stopped.", ephemeral: true });
-    }
-
+    // --------------------
+    // Start giveaways
+    // --------------------
     if (name === "startgiveaways") {
       await setGiveawaysRunning(guild.id, true);
-      await scheduleToday(client, guild);
       return interaction.reply({ content: "✅ Giveaways started.", ephemeral: true });
     }
 
-if (name === "resetwinners") {
-  const scope = interaction.options.getString("scope") || "today";
-  const winDateUTC = new Date().toISOString().slice(0, 10); // same format used when saving wins
+    // --------------------
+    // Stop giveaways
+    // --------------------
+    if (name === "stopgiveaways") {
+      await setGiveawaysRunning(guild.id, false);
 
-  const res = await resetWinners(guild.id, scope, winDateUTC);
+      // Clear scheduled timers
+      for (const t of client._timers) clearTimeout(t);
+      client._timers = [];
 
-  return interaction.reply({
-    content: `✅ Winners reset (${res.deleted}). Rows removed: ${res.rows}` + (res.winDateUTC ? ` (date=${res.winDateUTC} UTC)` : ""),
-    ephemeral: true
-  });
-}
-    
-    if (name === "setwinnerslog") {
-      const channel = interaction.options.getChannel("channel");
-      await setWinnersLogChannel(guild.id, channel.id);
-      return interaction.reply({ content: `✅ Winners log channel set to ${channel}.`, ephemeral: true });
+      return interaction.reply({ content: "🛑 Giveaways stopped.", ephemeral: true });
     }
-    
+
+    // --------------------
+    // Set public giveaway channel
+    // --------------------
     if (name === "setgiveawaychannel") {
       const channel = interaction.options.getChannel("channel");
       await setGiveawayChannel(guild.id, channel.id);
-      return interaction.reply({ content: `✅ Giveaway channel set to ${channel}.`, ephemeral: true });
+
+      return interaction.reply({
+        content: `✅ Giveaway channel set to ${channel}.`,
+        ephemeral: true
+      });
     }
 
+    // --------------------
+    // Set winners log channel
+    // --------------------
+    if (name === "setwinnerslog") {
+      const channel = interaction.options.getChannel("channel");
+      await setWinnersLogChannel(guild.id, channel.id);
+
+      return interaction.reply({
+        content: `🧾 Winners log channel set to ${channel}.`,
+        ephemeral: true
+      });
+    }
+
+    // --------------------
+    // Manual draw
+    // --------------------
     if (name === "drawnow") {
-      // still respects eligibility + "no duplicate winner today"
-      await interaction.reply({ content: "🎲 Drawing a winner now...", ephemeral: true });
+      await interaction.reply({ content: "🎲 Drawing a winner...", ephemeral: true });
 
       const conf = await getOrCreateConfig(guild.id);
       if (!conf.giveaway_channel_id) {
@@ -114,20 +180,49 @@ if (name === "resetwinners") {
       }
 
       const result = await pickWinner(client, guild);
+
       if (!result.winner) {
-        return interaction.followUp({ content: `No winner drawn: ${result.reason}`, ephemeral: true });
+        return interaction.followUp({
+          content: `❌ No winner drawn: ${result.reason}`,
+          ephemeral: true
+        });
       }
 
-      return interaction.followUp({ content: `✅ Winner drawn: <@${result.winner.id}>`, ephemeral: true });
+      return interaction.followUp({
+        content: `✅ Winner drawn: <@${result.winner.id}>`,
+        ephemeral: true
+      });
     }
-  } catch (e) {
-    console.error("interactionCreate error:", e);
+
+    // --------------------
+    // Reset winners
+    // --------------------
+    if (name === "resetwinners") {
+      const scope = interaction.options.getString("scope") || "today";
+      const res = await resetWinners(guild.id, scope);
+
+      return interaction.reply({
+        content: `♻️ Winners reset (${res.deleted}). Rows removed: ${res.rows}`,
+        ephemeral: true
+      });
+    }
+
+  } catch (err) {
+    console.error("interactionCreate error:", err);
+
     if (interaction?.isRepliable()) {
       try {
-        await interaction.reply({ content: "❌ Something went wrong handling that command.", ephemeral: true });
+        await interaction.reply({
+          content: "❌ Something went wrong while executing that command.",
+          ephemeral: true
+        });
       } catch {}
     }
   }
 });
 
+
+// --------------------
+// Login
+// --------------------
 client.login(cfg.BOT_TOKEN);
