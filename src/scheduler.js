@@ -1,87 +1,92 @@
 const cfg = require("./config");
 const { pickWinner, getOrCreateConfig } = require("./giveaway");
 
-function randomBetween(min, max) {
-  return min + Math.random() * (max - min);
+/**
+ * Pick a random timestamp inside a UTC hour window for TODAY.
+ */
+function randomTimeInWindow(startHour, endHour) {
+  const now = new Date();
+
+  const start = new Date(now);
+  start.setUTCHours(startHour, 0, 0, 0);
+
+  const end = new Date(now);
+  end.setUTCHours(endHour, 0, 0, 0);
+
+  const diff = end.getTime() - start.getTime();
+  const offset = Math.floor(Math.random() * diff);
+
+  return new Date(start.getTime() + offset);
 }
 
-function msUntil(ts) {
-  return Math.max(0, ts - Date.now());
-}
-
-function startOfTodayUTC() {
-  const d = new Date();
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0);
-}
-
-function computeDrawTimestampsUTC(timeWindows, winnersPerDay) {
-  const base = startOfTodayUTC();
-
-  const windows = timeWindows.map(w => {
-    const start = base + Math.max(0, Math.min(23, w.startHour)) * 3600_000;
-    const end = base + Math.max(1, Math.min(24, w.endHour)) * 3600_000;
-    return { start, end: Math.max(end, start + 60_000) };
-  });
-
-  const ts = [];
-  for (let i = 0; i < winnersPerDay; i++) {
-    const win = windows[Math.floor(Math.random() * windows.length)];
-    ts.push(Math.floor(randomBetween(win.start, win.end)));
-  }
-
-  ts.sort((a, b) => a - b);
-  return ts;
-}
-
+/**
+ * Schedule today's draws — exactly ONE per window.
+ */
 async function scheduleToday(client, guild) {
-  // clear old timers
-  for (const t of client._timers) clearTimeout(t);
-  client._timers = [];
-
   const conf = await getOrCreateConfig(guild.id);
-  if (!conf.giveaways_running) return;
-
-  const timestamps = computeDrawTimestampsUTC(cfg.TIME_WINDOWS, cfg.WINNERS_PER_DAY);
-
-  for (const ts of timestamps) {
-    if (ts <= Date.now()) continue;
-
-    const t = setTimeout(async () => {
-      try {
-        await pickWinner(client, guild);
-      } catch (e) {
-        console.error("Draw failed:", e);
-      }
-    }, msUntil(ts));
-
-    client._timers.push(t);
-  }
-
-  // reschedule just after next UTC midnight
-  const nextMidnight = startOfTodayUTC() + 24 * 3600_000 + 5_000;
-
-  const rescheduler = setTimeout(async () => {
-    try {
-      await scheduleToday(client, guild);
-    } catch (e) {
-      console.error("Reschedule failed:", e);
-    }
-  }, msUntil(nextMidnight));
-
-  client._timers.push(rescheduler);
-}
-
-async function startScheduler(client) {
-  const guild = cfg.GUILD_ID
-    ? client.guilds.cache.get(cfg.GUILD_ID)
-    : client.guilds.cache.first();
-
-  if (!guild) {
-    console.error("No guild found. Set GUILD_ID in .env for reliability.");
+  if (!conf.giveaways_running) {
+    console.log("[SCHEDULER] Giveaways disabled.");
     return;
   }
 
-  await scheduleToday(client, guild);
+  const windows = cfg.TIME_WINDOWS;
+
+  console.log(`[SCHEDULER] Scheduling ${windows.length} winners for today...`);
+
+  for (const window of windows) {
+    const drawTime = randomTimeInWindow(window.startHour, window.endHour);
+    const delay = drawTime.getTime() - Date.now();
+
+    // Skip past times (e.g., bot restarted late)
+    if (delay <= 0) {
+      console.log(`[SCHEDULER] Skipping past window draw at ${drawTime.toISOString()}`);
+      continue;
+    }
+
+    console.log(`[SCHEDULER] Next draw scheduled at ${drawTime.toISOString()}`);
+
+    const timer = setTimeout(async () => {
+      try {
+        console.log("[SCHEDULER] Running scheduled draw...");
+        await pickWinner(client, guild);
+      } catch (err) {
+        console.error("Scheduled draw error:", err);
+      }
+    }, delay);
+
+    client._timers.push(timer);
+  }
 }
 
-module.exports = { startScheduler, scheduleToday };
+/**
+ * Start daily scheduler loop.
+ * Re-schedules every 24h at midnight UTC.
+ */
+async function startScheduler(client) {
+  const guild = client.guilds.cache.get(cfg.GUILD_ID);
+  if (!guild) {
+    console.log("[SCHEDULER] Guild not found.");
+    return;
+  }
+
+  // Schedule immediately for today
+  await scheduleToday(client, guild);
+
+  // Calculate ms until next midnight UTC
+  const now = new Date();
+  const nextMidnight = new Date(now);
+  nextMidnight.setUTCHours(24, 0, 0, 0);
+
+  const msUntilMidnight = nextMidnight.getTime() - now.getTime();
+
+  console.log(`[SCHEDULER] Rescheduling in ${(msUntilMidnight / 1000 / 60).toFixed(2)} minutes`);
+
+  setTimeout(async () => {
+    await startScheduler(client); // loop daily
+  }, msUntilMidnight);
+}
+
+module.exports = {
+  startScheduler,
+  scheduleToday
+};
