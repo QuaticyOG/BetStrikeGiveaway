@@ -29,6 +29,9 @@ module.exports = {
   ELIGIBLE_ROLE_ID: process.env.ELIGIBLE_ROLE_ID || "",
   ELIGIBLE_ROLE_NAME: process.env.ELIGIBLE_ROLE_NAME || "striker",
 
+  WIN_COOLDOWN_DAYS: Number(process.env.WIN_COOLDOWN_DAYS ?? 4),
+
+  
   MIN_MESSAGES: Number(process.env.MIN_MESSAGES ?? 0),
   MIN_DAYS_IN_SERVER: Number(process.env.MIN_DAYS_IN_SERVER ?? 7),
   MIN_ACCOUNT_AGE_DAYS: Number(process.env.MIN_ACCOUNT_AGE_DAYS ?? 60),
