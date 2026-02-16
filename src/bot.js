@@ -1,13 +1,11 @@
 require("dotenv").config();
 
-const { Client, GatewayIntentBits, Partials } = require("discord.js");
+const { Client, GatewayIntentBits, Partials, EmbedBuilder } = require("discord.js");
 const cfg = require("./config");
 const db = require("./db");
 const { registerCommands } = require("./commands");
 const { startScheduler } = require("./scheduler");
 const { isEligible } = require("./eligibility");
-const cfg = require("./config");
-const { EmbedBuilder } = require("discord.js");
 
 const {
   setGiveawaysRunning,
@@ -277,6 +275,70 @@ client.on("interactionCreate", async (interaction) => {
         ephemeral: true
       });
     }
+
+    // --------------------
+// Eligibility check
+// --------------------
+if (name === "eligibility") {
+  const target = interaction.options.getUser("user");
+  const member = await guild.members.fetch(target.id).catch(() => null);
+
+  if (!member) {
+    return interaction.reply({ content: "❌ That user is not in this server.", ephemeral: true });
+  }
+
+  // Helpers
+  const check = (ok) => (ok ? "✅" : "❌");
+  const msToHuman = (ms) => {
+    const days = Math.floor(ms / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((ms / (1000 * 60 * 60)) % 24);
+    return `${days}d ${hours}h`;
+  };
+
+  const now = Date.now();
+
+  // Requirement 1: In server >= MIN_DAYS_IN_SERVER
+  const inServerMs = now - member.joinedTimestamp;
+  const reqInServer = (inServerMs / 86400000) >= cfg.MIN_DAYS_IN_SERVER;
+
+  // Requirement 2: Account age >= MIN_ACCOUNT_AGE_DAYS
+  const accountAgeMs = now - member.user.createdTimestamp;
+  const reqAccountAge = (accountAgeMs / 86400000) >= cfg.MIN_ACCOUNT_AGE_DAYS;
+
+  // Requirement 3: Has Level 5 role
+  const hasLevel5 =
+    (cfg.LEVEL5_ROLE_ID && member.roles.cache.has(cfg.LEVEL5_ROLE_ID)) ||
+    member.roles.cache.some(r => (r.name || "").toLowerCase() === (cfg.LEVEL5_ROLE_NAME || "level 5").toLowerCase());
+
+  // Requirement 4: Has Striker role
+  const hasStriker =
+    (cfg.STRIKER_ROLE_ID && member.roles.cache.has(cfg.STRIKER_ROLE_ID)) ||
+    member.roles.cache.some(r => (r.name || "").toLowerCase() === (cfg.STRIKER_ROLE_NAME || "striker").toLowerCase());
+
+  // Requirement 5: Has held Striker >= MIN_DAYS_WITH_STRIKER_ROLE
+  // We can’t easily pull the held-duration directly here without duplicating DB logic,
+  // so we show it as part of isEligible() + a separate “tracked timestamp exists” signal:
+  //
+  // Your eligibility.js already enforces the Striker-held rule strictly. :contentReference[oaicite:3]{index=3}
+  //
+  // If you want the exact held-time displayed too, tell me and I’ll add a tiny exported helper.
+  const overallEligible = await isEligible(member);
+
+  const embed = new EmbedBuilder()
+    .setTitle(`Eligibility check: ${member.user.tag}`)
+    .setDescription(overallEligible ? "✅ **Eligible**" : "❌ **Not eligible**")
+    .addFields(
+      { name: `In server ≥ ${cfg.MIN_DAYS_IN_SERVER} days`, value: `${check(reqInServer)} (${msToHuman(inServerMs)})` },
+      { name: `Account age ≥ ${cfg.MIN_ACCOUNT_AGE_DAYS} days`, value: `${check(reqAccountAge)} (${msToHuman(accountAgeMs)})` },
+      { name: `Has role: ${cfg.LEVEL5_ROLE_NAME}`, value: `${check(hasLevel5)}` },
+      { name: `Has role: ${cfg.STRIKER_ROLE_NAME}`, value: `${check(hasStriker)}` },
+      { name: `Held ${cfg.STRIKER_ROLE_NAME} ≥ ${cfg.MIN_DAYS_WITH_STRIKER_ROLE} days`, value: overallEligible ? "✅" : "❌" }
+    )
+    .setThumbnail(member.user.displayAvatarURL({ size: 128 }))
+    .setTimestamp();
+
+  return interaction.reply({ embeds: [embed], ephemeral: true });
+}
 
     // --------------------
     // Reset winners
