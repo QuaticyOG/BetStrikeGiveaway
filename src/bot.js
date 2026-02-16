@@ -68,7 +68,8 @@ client.once("ready", async () => {
       resolveRoleIdByName(guild, cfg.LEVEL5_ROLE_ID, cfg.LEVEL5_ROLE_NAME)
     ].filter(Boolean);
 
-    const now = new Date();
+    // Pretend existing holders received the role MIN_DAYS_WITH_STRIKER_ROLE days ago
+    const now = new Date(Date.now() - (cfg.MIN_DAYS_WITH_STRIKER_ROLE * 86400000));
 
     for (const [, m] of members) {
       for (const rid of tracked) {
