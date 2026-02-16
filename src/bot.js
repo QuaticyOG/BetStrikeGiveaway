@@ -5,6 +5,9 @@ const cfg = require("./config");
 const db = require("./db");
 const { registerCommands } = require("./commands");
 const { startScheduler } = require("./scheduler");
+const { isEligible } = require("./eligibility");
+const cfg = require("./config");
+const { EmbedBuilder } = require("discord.js");
 
 const {
   setGiveawaysRunning,
