@@ -144,7 +144,7 @@ async function pickWinner(client, guild) {
   if (publicChannel) {
     const embed = new EmbedBuilder()
       .setColor(cfg.GIVEAWAY_COLOR)
-      .setTitle("🎉 Giveaway Winner 🎉")
+      .setTitle("🎉 Surprise Puma Reward 🎉")
       .setDescription(cfg.GIVEAWAY_MESSAGE.replace("{user}", `<@${winner.id}>`))
       .setTimestamp();
 
