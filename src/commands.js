@@ -31,14 +31,13 @@ function buildCommands() {
 
     // ✅ NEW: eligibility command
     new SlashCommandBuilder()
-      .setName("eligibility")
-      .setDescription("Check a user's giveaway eligibility")
-      .addUserOption(o =>
-        o.setName("user")
-          .setDescription("User to check")
-          .setRequired(true)
-      )
-      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+  .setName("eligibility")
+  .setDescription("Check a user's giveaway eligibility")
+  .addUserOption(o =>
+    o.setName("user")
+      .setDescription("User to check")
+      .setRequired(false) // optional so they can check themselves
+  ),
 
   ].map(cmd => cmd.toJSON());
 }
