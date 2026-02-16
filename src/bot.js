@@ -57,32 +57,36 @@ client.once("ready", async () => {
 
   await registerCommands(client);
 
-  // Warm member cache + backfill role timestamps
-  setTimeout(async () => {
-    const guild = client.guilds.cache.get(cfg.GUILD_ID);
-    if (!guild) return;
+// Warm member cache + backfill role timestamps
+setTimeout(async () => {
+  const guild = client.guilds.cache.get(cfg.GUILD_ID);
+  if (!guild) return;
 
-    const members = await guild.members.fetch();
-    const tracked = [
-      resolveRoleIdByName(guild, cfg.STRIKER_ROLE_ID, cfg.STRIKER_ROLE_NAME),
-      resolveRoleIdByName(guild, cfg.LEVEL5_ROLE_ID, cfg.LEVEL5_ROLE_NAME)
-    ].filter(Boolean);
+  const members = await guild.members.fetch();
+  const tracked = [
+    resolveRoleIdByName(guild, cfg.STRIKER_ROLE_ID, cfg.STRIKER_ROLE_NAME),
+    resolveRoleIdByName(guild, cfg.LEVEL5_ROLE_ID, cfg.LEVEL5_ROLE_NAME)
+  ].filter(Boolean);
 
-    // Pretend existing holders received the role MIN_DAYS_WITH_STRIKER_ROLE days ago
-    const now = new Date(Date.now() - (cfg.MIN_DAYS_WITH_STRIKER_ROLE * 86400000));
+  // Pretend existing holders received the role MIN_DAYS_WITH_STRIKER_ROLE days ago
+  const backfillDate = new Date(Date.now() - (cfg.MIN_DAYS_WITH_STRIKER_ROLE * 86400000));
 
-    for (const [, m] of members) {
-      for (const rid of tracked) {
-        if (!m.roles.cache.has(rid)) continue;
-        await db.query(
-          `INSERT INTO role_assignments (guild_id,user_id,role_id,assigned_at)
-           VALUES ($1,$2,$3,$4)
-           ON CONFLICT DO NOTHING`,
-          [guild.id, m.id, rid, now]
-        );
-      }
+  for (const [, m] of members) {
+    for (const rid of tracked) {
+      if (!m.roles.cache.has(rid)) continue;
+
+      await db.query(
+        `INSERT INTO role_assignments (guild_id, user_id, role_id, assigned_at)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (guild_id, user_id, role_id)
+         DO UPDATE SET assigned_at = EXCLUDED.assigned_at`,
+        [guild.id, m.id, rid, backfillDate]
+      );
     }
-  }, 5000);
+  }
+
+  console.log("✅ Role assignment backfill complete");
+}, 5000);
 
   await startScheduler(client);
 });
@@ -102,15 +106,18 @@ client.on("guildMemberUpdate", async (oldM, newM) => {
   const now = new Date();
 
   for (const rid of tracked) {
+    // Role added → store timestamp
     if (!oldRoles.has(rid) && newRoles.has(rid)) {
       await db.query(
-        `INSERT INTO role_assignments (guild_id,user_id,role_id,assigned_at)
-         VALUES ($1,$2,$3,$4)
-         ON CONFLICT DO UPDATE SET assigned_at=$4`,
+        `INSERT INTO role_assignments (guild_id, user_id, role_id, assigned_at)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (guild_id, user_id, role_id)
+         DO UPDATE SET assigned_at = EXCLUDED.assigned_at`,
         [newM.guild.id, newM.id, rid, now]
       );
     }
 
+    // Role removed → delete timestamp
     if (oldRoles.has(rid) && !newRoles.has(rid)) {
       await db.query(
         `DELETE FROM role_assignments WHERE guild_id=$1 AND user_id=$2 AND role_id=$3`,
