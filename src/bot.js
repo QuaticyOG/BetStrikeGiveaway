@@ -141,4 +141,74 @@ client.on("interactionCreate", async interaction => {
     const days = ms => `${Math.floor(ms / 86400000)}d`;
 
     const inServerMs = now - member.joinedTimestamp;
-    const accou
+    const accountAgeMs = now - member.user.createdTimestamp;
+
+    const strikerRoleId = resolveRoleIdByName(guild, cfg.STRIKER_ROLE_ID, cfg.STRIKER_ROLE_NAME);
+    const level5RoleId = resolveRoleIdByName(guild, cfg.LEVEL5_ROLE_ID, cfg.LEVEL5_ROLE_NAME);
+
+    const hasStriker = member.roles.cache.has(strikerRoleId);
+    const hasLevel5 = member.roles.cache.has(level5RoleId);
+
+    const roleRow = strikerRoleId
+      ? await db.query(
+          "SELECT assigned_at FROM role_assignments WHERE guild_id=$1 AND user_id=$2 AND role_id=$3",
+          [guild.id, member.id, strikerRoleId]
+        )
+      : null;
+
+    const assignedAt = roleRow?.rows?.[0]?.assigned_at;
+    const strikerHeldMs = assignedAt ? now - new Date(assignedAt).getTime() : 0;
+
+    const embed = new EmbedBuilder()
+      .setTitle(`Eligibility: ${member.user.tag}`)
+      .setDescription((await isEligible(member)) ? "✅ **Eligible**" : "❌ **Not Eligible**")
+      .addFields(
+        { name: "In server ≥ 7 days", value: `${check(inServerMs >= 7 * 86400000)} (${days(inServerMs)})` },
+        { name: "Account ≥ 60 days", value: `${check(accountAgeMs >= 60 * 86400000)} (${days(accountAgeMs)})` },
+        { name: "Has Striker role", value: check(hasStriker) },
+        { name: "Has Level 5 role", value: check(hasLevel5) },
+        {
+          name: "Held Striker ≥ 7 days",
+          value: hasStriker && assignedAt
+            ? `${check(strikerHeldMs >= 7 * 86400000)} (${days(strikerHeldMs)})`
+            : "❌"
+        }
+      )
+      .setThumbnail(member.user.displayAvatarURL())
+      .setTimestamp();
+
+    return interaction.reply({ embeds: [embed], ephemeral: true });
+  }
+
+  // --------------------
+  // Existing commands
+  // --------------------
+  if (commandName === "startgiveaways") {
+    await setGiveawaysRunning(guild.id, true);
+    return interaction.reply({ content: "✅ Giveaways started.", ephemeral: true });
+  }
+
+  if (commandName === "stopgiveaways") {
+    await setGiveawaysRunning(guild.id, false);
+    return interaction.reply({ content: "🛑 Giveaways stopped.", ephemeral: true });
+  }
+
+  if (commandName === "drawnow") {
+    const result = await pickWinner(client, guild);
+    return interaction.reply({
+      content: result.winner ? `🎉 <@${result.winner.id}>` : `❌ ${result.reason}`,
+      ephemeral: true
+    });
+  }
+
+  if (commandName === "resetwinners") {
+    const scope = interaction.options.getString("scope") || "today";
+    const res = await resetWinners(guild.id, scope);
+    return interaction.reply({ content: `♻️ Reset (${res.deleted})`, ephemeral: true });
+  }
+});
+
+// --------------------
+// Login
+// --------------------
+client.login(cfg.BOT_TOKEN);
