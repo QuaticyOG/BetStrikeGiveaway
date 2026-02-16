@@ -26,8 +26,16 @@ module.exports = {
   BOT_TOKEN: mustGet("BOT_TOKEN"),
   DATABASE_URL: mustGet("DATABASE_URL"),
 
+  // Base pool role (used to enumerate candidates efficiently)
+  // In your case this should be your "striker" role.
   ELIGIBLE_ROLE_ID: process.env.ELIGIBLE_ROLE_ID || "",
   ELIGIBLE_ROLE_NAME: process.env.ELIGIBLE_ROLE_NAME || "striker",
+
+  // Requirements
+  STRIKER_ROLE_ID: process.env.STRIKER_ROLE_ID || process.env.ELIGIBLE_ROLE_ID || "",
+  STRIKER_ROLE_NAME: process.env.STRIKER_ROLE_NAME || process.env.ELIGIBLE_ROLE_NAME || "striker",
+  LEVEL5_ROLE_ID: process.env.LEVEL5_ROLE_ID || "",
+  LEVEL5_ROLE_NAME: process.env.LEVEL5_ROLE_NAME || "level 5",
 
   WIN_COOLDOWN_DAYS: Number(process.env.WIN_COOLDOWN_DAYS ?? 4),
 
@@ -35,6 +43,7 @@ module.exports = {
   MIN_MESSAGES: Number(process.env.MIN_MESSAGES ?? 0),
   MIN_DAYS_IN_SERVER: Number(process.env.MIN_DAYS_IN_SERVER ?? 7),
   MIN_ACCOUNT_AGE_DAYS: Number(process.env.MIN_ACCOUNT_AGE_DAYS ?? 60),
+  MIN_DAYS_WITH_STRIKER_ROLE: Number(process.env.MIN_DAYS_WITH_STRIKER_ROLE ?? 7),
 
   WINNERS_PER_DAY: Number(process.env.WINNERS_PER_DAY ?? 1),
   TIME_WINDOWS: getTimeWindows(),

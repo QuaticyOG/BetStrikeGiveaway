@@ -31,6 +31,13 @@ const client = new Client({
 
 client._timers = [];
 
+function resolveRoleIdByName(guild, roleId, roleName) {
+  if (roleId) return roleId;
+  const target = (roleName || "").toLowerCase();
+  const role = guild?.roles?.cache?.find(r => (r.name || "").toLowerCase() === target);
+  return role?.id || "";
+}
+
 
 // --------------------
 // Global safety handlers (prevent Railway crash loops)
@@ -72,6 +79,32 @@ client.once("ready", async () => {
         console.log("Warming full member cache...");
         const members = await guild.members.fetch(); // fetch ALL members once
         console.log(`Member cache ready: ${members.size} members`);
+
+        // Backfill role assignment timestamps for members that CURRENTLY have the tracked roles.
+        // NOTE: Discord doesn't provide historical "role granted at" timestamps, so for existing holders
+        // the first timestamp we can store is "now". That means existing Striker holders will become
+        // eligible after MIN_DAYS_WITH_STRIKER_ROLE days *from this deploy* unless you seed the DB manually.
+        const trackedRoleIds = [
+          resolveRoleIdByName(guild, cfg.STRIKER_ROLE_ID || cfg.ELIGIBLE_ROLE_ID, cfg.STRIKER_ROLE_NAME),
+          resolveRoleIdByName(guild, cfg.LEVEL5_ROLE_ID, cfg.LEVEL5_ROLE_NAME)
+        ].filter(Boolean);
+
+        if (trackedRoleIds.length) {
+          const now = new Date();
+          let upserts = 0;
+          for (const [, m] of members) {
+            for (const rid of trackedRoleIds) {
+              if (!m.roles.cache.has(rid)) continue;
+              await db.query(
+                "INSERT INTO role_assignments (guild_id, user_id, role_id, assigned_at) VALUES ($1,$2,$3,$4) " +
+                "ON CONFLICT (guild_id, user_id, role_id) DO NOTHING",
+                [guild.id, m.id, rid, now]
+              );
+              upserts++;
+            }
+          }
+          console.log(`Role assignment backfill complete (attempted inserts: ${upserts})`);
+        }
       } catch (err) {
         console.error("Member cache warm failed:", err.message);
       }
@@ -83,6 +116,54 @@ client.once("ready", async () => {
 
   } catch (err) {
     console.error("Startup error:", err);
+  }
+});
+
+
+// --------------------
+// Track role grant/removal times (for "held role for X days" rules)
+// --------------------
+client.on("guildMemberUpdate", async (oldMember, newMember) => {
+  try {
+    if (!oldMember?.guild || !newMember?.guild) return;
+    if (newMember.user?.bot) return;
+
+    const oldRoles = new Set(oldMember.roles.cache.map(r => r.id));
+    const newRoles = new Set(newMember.roles.cache.map(r => r.id));
+
+    const added = [];
+    const removed = [];
+
+    for (const rid of newRoles) if (!oldRoles.has(rid)) added.push(rid);
+    for (const rid of oldRoles) if (!newRoles.has(rid)) removed.push(rid);
+
+    if (!added.length && !removed.length) return;
+
+    const tracked = new Set([
+      resolveRoleIdByName(newMember.guild, cfg.STRIKER_ROLE_ID || cfg.ELIGIBLE_ROLE_ID, cfg.STRIKER_ROLE_NAME),
+      resolveRoleIdByName(newMember.guild, cfg.LEVEL5_ROLE_ID, cfg.LEVEL5_ROLE_NAME)
+    ].filter(Boolean));
+
+    const now = new Date();
+
+    for (const rid of added) {
+      if (!tracked.has(rid)) continue;
+      await db.query(
+        "INSERT INTO role_assignments (guild_id, user_id, role_id, assigned_at) VALUES ($1,$2,$3,$4) " +
+        "ON CONFLICT (guild_id, user_id, role_id) DO UPDATE SET assigned_at=EXCLUDED.assigned_at, updated_at=NOW()",
+        [newMember.guild.id, newMember.id, rid, now]
+      );
+    }
+
+    for (const rid of removed) {
+      if (!tracked.has(rid)) continue;
+      await db.query(
+        "DELETE FROM role_assignments WHERE guild_id=$1 AND user_id=$2 AND role_id=$3",
+        [newMember.guild.id, newMember.id, rid]
+      );
+    }
+  } catch (e) {
+    console.error("guildMemberUpdate role tracking error:", e);
   }
 });
 
