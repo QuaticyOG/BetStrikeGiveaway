@@ -47,6 +47,14 @@ function buildCommands() {
   ].map(c => c.toJSON());
 }
 
+new SlashCommandBuilder()
+  .setName("eligibility")
+  .setDescription("Check a user's eligibility for the giveaway (admin only)")
+  .addUserOption(o =>
+    o.setName("user").setDescription("User to check").setRequired(true)
+  )
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
 async function registerCommands(client) {
   const rest = new REST({ version: "10" }).setToken(cfg.BOT_TOKEN);
   const body = buildCommands();
