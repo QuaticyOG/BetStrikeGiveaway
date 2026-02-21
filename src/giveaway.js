@@ -178,51 +178,55 @@ Stay active. Keep the tag. Win anytime. <a:emoji_name:1473066768749822004>
     time: 5 * 60 * 1000
   });
 
-  collector.on("collect", async interaction => {
-    if (interaction.customId !== replayId) return;
+collector.on("collect", async interaction => {
+  if (interaction.customId !== replayId) return;
 
-    if (activeReplays.has(interaction.user.id)) {
-      return interaction.reply({
-        content: "Your replay is already running.",
-        ephemeral: true
-      });
-    }
+  // 🚀 acknowledge immediately
+  await interaction.deferReply({ ephemeral: true });
 
-    activeReplays.add(interaction.user.id);
+  // anti-spam
+  if (activeReplays.has(interaction.user.id)) {
+    return interaction.editReply({
+      content: "Your replay is already running."
+    });
+  }
 
-    try {
-      await interaction.reply({
-        content: "🎰 Replaying your case...",
-        ephemeral: true
-      });
+  activeReplays.add(interaction.user.id);
 
-      const strip = buildReelStrip(spinEmojis, 60);
-      const winIndex = Math.floor(strip.length * 0.75);
-      strip[winIndex] = prize.emoji;
+  try {
+    await interaction.editReply({
+      content: "🎰 Replaying your case..."
+    });
 
-      let position = 0;
-      const speeds = [70, 85, 100, 130, 170, 230, 300];
+    const strip = buildReelStrip(spinEmojis, 60);
+    const winIndex = Math.floor(strip.length * 0.75);
+    strip[winIndex] = prize.emoji;
 
-      for (const delay of speeds) {
-        const windowRow = getWindow(strip, position);
-        await interaction.editReply(
-          `🎰 Replaying case...\n\n${buildSpinner(windowRow)}`
-        );
-        position++;
-        await sleep(delay);
-      }
+    let position = 0;
+    const speeds = [70, 85, 100, 130, 170, 230, 300];
 
-      const finalRowGlowed = playPublicAnimation.finalRowGlowed;
+    for (const delay of speeds) {
+      const windowRow = getWindow(strip, position);
 
       await interaction.editReply(
-        `🎰 **Replay Result**\n\n${asBlockquote(
-          buildSpinner(finalRowGlowed)
-        )}\n\n🏆 Case reward: ${prize.emoji} **${prize.name}**`
+        `🎰 Replaying case...\n\n${buildSpinner(windowRow)}`
       );
-    } finally {
-      activeReplays.delete(interaction.user.id);
+
+      position++;
+      await sleep(delay);
     }
-  });
+
+    const finalRowGlowed = playPublicAnimation.finalRowGlowed;
+
+    await interaction.editReply(
+      `🎰 **Replay Result**\n\n${asBlockquote(
+        buildSpinner(finalRowGlowed)
+      )}\n\n🏆 Case reward: ${prize.emoji} **${prize.name}**`
+    );
+  } finally {
+    activeReplays.delete(interaction.user.id);
+  }
+});
 
   collector.on("end", async () => {
     try {
