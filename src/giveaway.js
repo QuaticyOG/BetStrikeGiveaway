@@ -56,16 +56,22 @@ function asBlockquote(text) {
 function buildSpinner(row) {
   const slots = row.split(" ").length;
 
-  // tuned visual center for Discord emoji rows
-  const padSize = Math.floor(slots * 1.75);
-  const pad = "\u2800".repeat(padSize);
+  // Visual tuning for Discord emoji width
+  const arrowPad = "\u2800".repeat(Math.floor(slots * 1.75));
+
+  // Build dynamic frame width based on row length
+  const rowWidth = row.length;
+  const side = Math.max(8, Math.floor(rowWidth / 2) - 2);
+
+  const topBorder = "━".repeat(side) + "⊱⋆⊰" + "━".repeat(side);
+  const bottomBorder = "━".repeat(side * 2 + 3);
 
   return [
-    "━━━━━━━━━━━⊱⋆⊰━━━━━━━━━",
-    pad + "▼",
+    topBorder,
+    arrowPad + "▼",
     row,
-    pad + "▲",
-    "━━━━━━━━━━━━━━━━━━━━━━━━"
+    arrowPad + "▲",
+    bottomBorder
   ].join("\n");
 }
 
