@@ -114,7 +114,7 @@ async function runCaseAnimation(channel, winner, prize) {
   const activeReplays = new Set();
 
   const msg = await channel.send({
-    content: "🎰 Surprise Betstrike Case..."
+    content: "<:case:1474816589659504701> Surprise Betstrike Case..."
   });
 
   // ---------- PUBLIC PREMIUM SPIN ----------
@@ -128,8 +128,8 @@ async function runCaseAnimation(channel, winner, prize) {
 
     for (const delay of speeds) {
       const windowRow = getWindow(strip, position);
-      await msg.edit(
-        `🎰 Surprise Betstrike Case...\n\n${buildSpinner(windowRow)}`
+     await msg.edit(
+      `<:case:1474816589659504701> **Surprise Betstrike Case...**\n\n${buildSpinner(windowRow)}`
       );
       position++;
       await sleep(delay);
