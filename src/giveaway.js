@@ -219,7 +219,7 @@ collector.on("collect", async interaction => {
     const finalRowGlowed = playPublicAnimation.finalRowGlowed;
 
     await interaction.editReply(
-      `🎰 **Replay Result**\n\n${asBlockquote(
+      `<:case:1474816589659504701> **Replay Result**\n\n${asBlockquote(
         buildSpinner(finalRowGlowed)
       )}\n\n🏆 Case reward: ${prize.emoji} **${prize.name}**`
     );
