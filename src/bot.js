@@ -228,7 +228,8 @@ if (commandName === "setwinnerlog") {
     ephemeral: true
   });
 }
-  
+}); //  
+
 // --------------------
 // Login
 // --------------------
