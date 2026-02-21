@@ -1,12 +1,126 @@
 // src/giveaway.js
-const { EmbedBuilder } = require("discord.js");
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} = require("discord.js");
 const db = require("./db");
 const cfg = require("./config");
 const { isEligible } = require("./eligibility");
 
 function todayISODateUTC() {
-  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
+  return new Date().toISOString().slice(0, 10);
 }
+
+/* ------------------------------------------------ */
+/*                    PRIZE RNG                     */
+/* ------------------------------------------------ */
+
+function pickWeightedPrize(prizes) {
+  const total = prizes.reduce((sum, p) => sum + p.weight, 0);
+  let roll = Math.random() * total;
+
+  for (const prize of prizes) {
+    if (roll < prize.weight) return prize;
+    roll -= prize.weight;
+  }
+  return prizes[0];
+}
+
+/* ------------------------------------------------ */
+/*                 CASE ANIMATION                   */
+/* ------------------------------------------------ */
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+async function runCaseAnimation(channel, winner, prize) {
+  const spinEmojis = cfg.PRIZES.map(p => p.emoji);
+
+  const replayId = `replay_${winner.id}_${Date.now()}`;
+
+  const msg = await channel.send({
+    content: "🎰 Opening Betstrike Case..."
+  });
+
+  // ---------- SPIN ----------
+  async function playAnimation() {
+    // fast spin
+    for (let i = 0; i < 8; i++) {
+      const row = Array.from({ length: 5 }, () =>
+        spinEmojis[Math.floor(Math.random() * spinEmojis.length)]
+      ).join(" ");
+
+      await msg.edit(`🎰 Opening Betstrike Case...\n\n${row}`);
+      await new Promise(r => setTimeout(r, 120));
+    }
+
+    // slow spin
+    for (let i = 0; i < 4; i++) {
+      const row = Array.from({ length: 5 }, () =>
+        spinEmojis[Math.floor(Math.random() * spinEmojis.length)]
+      ).join(" ");
+
+      await msg.edit(`🎰 Opening Betstrike Case...\n\n${row}`);
+      await new Promise(r => setTimeout(r, 250));
+    }
+
+    // final landing
+    const finalRow = [
+      spinEmojis[Math.floor(Math.random() * spinEmojis.length)],
+      spinEmojis[Math.floor(Math.random() * spinEmojis.length)],
+      prize.emoji,
+      spinEmojis[Math.floor(Math.random() * spinEmojis.length)],
+      spinEmojis[Math.floor(Math.random() * spinEmojis.length)]
+    ].join(" ");
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(replayId)
+        .setLabel("Replay")
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    await msg.edit({
+      content:
+        `🎉 <@${winner.id}> just got rewarded for rocking the Betstrike tag 🔥\n\n` +
+        `${finalRow}\n\n` +
+        `🏆 **Prize:** ${prize.emoji} ${prize.name}\n\n` +
+        `Stay active. Keep the tag. Win anytime.`,
+      components: [row]
+    });
+  }
+
+  await playAnimation();
+
+  // ---------- REPLAY HANDLER ----------
+  const collector = msg.createMessageComponentCollector({
+    time: 5 * 60 * 1000 // 5 minutes
+  });
+
+  collector.on("collect", async interaction => {
+    if (interaction.customId !== replayId) return;
+
+    await interaction.deferUpdate();
+
+    // replay animation only (same prize)
+    await playAnimation();
+  });
+
+  collector.on("end", async () => {
+    try {
+      await msg.edit({ components: [] });
+    } catch {}
+  });
+
+  return msg;
+}
+
+/* ------------------------------------------------ */
+/*                   CONFIG DB                      */
+/* ------------------------------------------------ */
 
 async function getOrCreateConfig(guildId) {
   await db.query(
@@ -72,11 +186,6 @@ async function hasWonWithinCooldown(guildId, userId, cooldownDays) {
   return res.rowCount > 0;
 }
 
-/**
- * Reset winners for testing.
- * - scope "today": deletes rows where win_date matches today's UTC date (same as the bot stores)
- * - scope "all": deletes all winners for that guild
- */
 async function resetWinners(guildId, scope = "today") {
   if (scope === "all") {
     const res = await db.query("DELETE FROM daily_winners WHERE guild_id=$1", [guildId]);
@@ -91,6 +200,10 @@ async function resetWinners(guildId, scope = "today") {
   return { deleted: "today", rows: res.rowCount, winDateUTC };
 }
 
+/* ------------------------------------------------ */
+/*                   PICK WINNER                    */
+/* ------------------------------------------------ */
+
 async function pickWinner(client, guild) {
   const conf = await getOrCreateConfig(guild.id);
   if (!conf.giveaways_running) return { winner: null, reason: "Giveaways are stopped." };
@@ -98,25 +211,16 @@ async function pickWinner(client, guild) {
   const winDateUTC = todayISODateUTC();
 
   const role = findEligibleRole(guild);
-  if (!role) return { winner: null, reason: "Eligible role not found. Check ELIGIBLE_ROLE_ID." };
+  if (!role) return { winner: null, reason: "Eligible role not found." };
 
-  // Cache warm if role.members isn't populated yet
   if (role.members.size === 0) {
-    if (client._lastMemberChunkAt && Date.now() - client._lastMemberChunkAt < 30_000) {
-      return { winner: null, reason: "Member cache warming up. Try again in ~30 seconds." };
-    }
-    client._lastMemberChunkAt = Date.now();
     try {
       await guild.members.fetch();
     } catch (e) {
       console.error("Member cache warm failed:", e);
-      return { winner: null, reason: "Discord rate limited member fetch. Try again shortly." };
+      return { winner: null, reason: "Member cache warming." };
     }
   }
-
-  console.log(
-    `[DRAW] Guild=${guild.id} Role=${role.name} RoleMembers=${role.members.size} Date=${winDateUTC}`
-  );
 
   const eligible = [];
   for (const [, member] of role.members) {
@@ -125,49 +229,22 @@ async function pickWinner(client, guild) {
     if (await isEligible(member)) eligible.push(member);
   }
 
-  console.log(`[DRAW] EligibleAfterChecks=${eligible.length}`);
-
   if (eligible.length === 0) return { winner: null, reason: "No eligible members found." };
 
   const winner = eligible[Math.floor(Math.random() * eligible.length)];
 
-  // record winner (prevents same-day duplicates)
   await db.query(
     "INSERT INTO daily_winners (guild_id, user_id, win_date) VALUES ($1, $2, $3::date) ON CONFLICT DO NOTHING",
     [guild.id, winner.id, winDateUTC]
   );
 
-  // Public winner channel
+  // 🎰 CASE SYSTEM HERE
   const publicChannelId = conf.giveaway_channel_id;
   const publicChannel = publicChannelId ? guild.channels.cache.get(publicChannelId) : null;
 
   if (publicChannel) {
-    const embed = new EmbedBuilder()
-      .setColor(cfg.GIVEAWAY_COLOR)
-      .setTitle("🎉 Surprise Puma Reward 🎉")
-      .setDescription(cfg.GIVEAWAY_MESSAGE.replace("{user}", `<@${winner.id}>`))
-      .setTimestamp();
-
-    await publicChannel.send({ embeds: [embed] });
-  }
-
-  // Staff log channel
-  const logChannelId = conf.log_channel_id;
-  const logChannel = logChannelId ? guild.channels.cache.get(logChannelId) : null;
-
-  if (logChannel) {
-    const logEmbed = new EmbedBuilder()
-      .setColor(cfg.GIVEAWAY_COLOR)
-      .setTitle("🧾 Winners Log")
-      .setDescription(`Winner: <@${winner.id}>`)
-      .addFields(
-        { name: "Date (UTC)", value: winDateUTC, inline: true },
-        { name: "Cooldown days", value: String(cfg.WIN_COOLDOWN_DAYS), inline: true },
-        { name: "Role", value: `${role.name} (${role.id})`, inline: false }
-      )
-      .setTimestamp();
-
-    await logChannel.send({ embeds: [logEmbed] });
+    const prize = pickWeightedPrize(cfg.PRIZES);
+    await runCaseAnimation(publicChannel, winner, prize);
   }
 
   return { winner, reason: null };
