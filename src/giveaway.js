@@ -60,7 +60,7 @@ function getWindow(strip, start, size = 7) {
 const ARROW_PAD_PER_SLOT = 3;
 
 // Fine-tune by 0..6 without changing slot scaling
-const ARROW_PAD_OFFSET = 1;
+const ARROW_PAD_OFFSET = 0;
 
 function buildSpinner(row) {
   const parts = row.split(" ");
