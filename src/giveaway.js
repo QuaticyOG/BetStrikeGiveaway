@@ -159,7 +159,7 @@ async function runCaseAnimation(channel, winner, prize) {
 <@${winner.id}> just got rewarded ${prize.emoji} **${prize.name}** for rocking the Betstrike tag 🔥
 
 ${asBlockquote(
-  `🎰 **Betstrike Case**\n\n${buildSpinner(finalRowGlowed)}`
+  `<:case:1474816589659504701> **Betstrike Case**\n\n${buildSpinner(finalRowGlowed)}`
 )}
 
 Stay active. Keep the tag. Win anytime. <a:emoji_name:1473066768749822004>
@@ -195,7 +195,7 @@ collector.on("collect", async interaction => {
 
   try {
     await interaction.editReply({
-      content: "🎰 Replaying your case..."
+      content: "<:case:1474816589659504701> Replaying your case..."
     });
 
     const strip = buildReelStrip(spinEmojis, 60);
