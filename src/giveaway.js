@@ -160,7 +160,7 @@ Stay active. Keep the tag. Win anytime. <a:emoji_name:1473066768749822004>
   /* ------------------------------------------------ */
 
   const collector = msg.createMessageComponentCollector({
-    time: 5 * 60 * 1000
+    time: 15 * 60 * 1000
   });
 
   collector.on("collect", async interaction => {
