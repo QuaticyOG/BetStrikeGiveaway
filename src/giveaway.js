@@ -46,15 +46,17 @@ function randomRow(emojis) {
 // two spaces keeps mobile alignment clean
 return Array.from({ length: 5 }, () =>
 emojis[Math.floor(Math.random() * emojis.length)]
-).join("  ");
+).join(" ");
 }
 
 function buildSpinner(row) {
-return (
-`>      ${POINTER_TOP}\n` +
-`> ${row}\n` +
-`>      ${POINTER_BOTTOM}`
-);
+  return (
+    "```" + "\n" +
+    "      ▼\n" +
+    `${row}\n` +
+    "      ▲\n" +
+    "```"
+  );
 }
 
 async function runCaseAnimation(channel, winner, prize) {
