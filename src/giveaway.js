@@ -85,10 +85,10 @@ async function runCaseAnimation(channel, winner, prize) {
 
     await msg.edit({
       content:
-        `🎉 <@${winner.id}> just got rewarded for rocking the Betstrike tag 🔥\n\n` +
+        `<@${winner.id}> just got rewarded for rocking the Betstrike tag 🔥\n\n` +
         `${finalRow}\n\n` +
         `🏆 **Prize:** ${prize.emoji} ${prize.name}\n\n` +
-        `Stay active. Keep the tag. Win anytime.`,
+        `Stay active. Keep the tag. Win anytime. <a:emoji_name:1473066768749822004>`,
       components: [row]
     });
   }
