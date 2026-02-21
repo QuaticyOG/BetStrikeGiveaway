@@ -42,21 +42,20 @@ function sleep(ms) {
 return new Promise(r => setTimeout(r, ms));
 }
 
+// 🔥 7-slot reel for proper centering
 function randomRow(emojis) {
-// two spaces keeps mobile alignment clean
-return Array.from({ length: 5 }, () =>
+return Array.from({ length: 7 }, () =>
 emojis[Math.floor(Math.random() * emojis.length)]
 ).join(" ");
 }
 
 function buildSpinner(row) {
-  return (
-    "```" + "\n" +
-    "      ▼\n" +
-    `${row}\n` +
-    "      ▲\n" +
-    "```"
-  );
+return (
+"``" + "\n" +
+    "           ▼\n" +     `${row}\n` +
+    "           ▲\n" +
+    "``"
+);
 }
 
 async function runCaseAnimation(channel, winner, prize) {
@@ -67,7 +66,7 @@ const msg = await channel.send({
 content: "🎰 Surprise Betstrike Case..."
 });
 
-// ---------- MAIN SPIN ----------
+// ---------- PUBLIC SPIN ----------
 async function playPublicAnimation() {
 // fast spin
 for (let i = 0; i < 8; i++) {
@@ -79,7 +78,7 @@ buildSpinner(row)
 await sleep(120);
 }
 
-
+```
 // slow spin
 for (let i = 0; i < 4; i++) {
   const row = randomRow(spinEmojis);
@@ -90,14 +89,15 @@ for (let i = 0; i < 4; i++) {
   await sleep(250);
 }
 
-// final landing (winner forced center)
-const finalRow = [
-  spinEmojis[Math.floor(Math.random() * spinEmojis.length)],
-  spinEmojis[Math.floor(Math.random() * spinEmojis.length)],
-  prize.emoji,
-  spinEmojis[Math.floor(Math.random() * spinEmojis.length)],
+// 🔥 TRUE CENTERED FINAL ROW
+const finalRowArray = Array.from({ length: 7 }, () =>
   spinEmojis[Math.floor(Math.random() * spinEmojis.length)]
-].join("  ");
+);
+
+// force prize to center slot
+finalRowArray[3] = prize.emoji;
+
+const finalRow = finalRowArray.join(" ");
 
 const row = new ActionRowBuilder().addComponents(
   new ButtonBuilder()
@@ -108,13 +108,15 @@ const row = new ActionRowBuilder().addComponents(
 
 await msg.edit({
   content:
-`**<@${winner.id}> just got rewarded ${prize.emoji} **${prize.name}** for rocking the Betstrike tag 🔥**
+```
+
+`🎉 **<@${winner.id}> just got rewarded ${prize.emoji} **${prize.name}** for rocking the Betstrike tag 🔥**
 
 > 🎰 **Betstrike Case**
-${buildSpinner(finalRow)}
+> ${buildSpinner(finalRow)}
 
 Stay active. Keep the tag. Win anytime. <a:emoji_name:1473066768749822004>`,
-  components: [row]
+components: [row]
 });
 }
 
@@ -131,7 +133,7 @@ time: 5 * 60 * 1000
 collector.on("collect", async interaction => {
 if (interaction.customId !== replayId) return;
 
-
+```
 // only winner can replay
 if (interaction.user.id !== winner.id) {
   return interaction.reply({
@@ -158,20 +160,19 @@ for (let i = 0; i < 6; i++) {
 }
 
 // private final landing
-const finalRow = [
-  spinEmojis[Math.floor(Math.random() * spinEmojis.length)],
-  spinEmojis[Math.floor(Math.random() * spinEmojis.length)],
-  prize.emoji,
-  spinEmojis[Math.floor(Math.random() * spinEmojis.length)],
+const finalRowArray = Array.from({ length: 7 }, () =>
   spinEmojis[Math.floor(Math.random() * spinEmojis.length)]
-].join("  ");
+);
+
+finalRowArray[3] = prize.emoji;
+const finalRow = finalRowArray.join(" ");
 
 await interaction.editReply(
   `🎰 **Replay Result**\n\n` +
   buildSpinner(finalRow) +
   `\n\n🏆 You won: ${prize.emoji} **${prize.name}**`
 );
-
+```
 
 });
 
@@ -235,18 +236,18 @@ return res.rowCount > 0;
 }
 
 async function hasWonWithinCooldown(guildId, userId, cooldownDays) {
-  if (!cooldownDays || cooldownDays <= 0) return false;
+if (!cooldownDays || cooldownDays <= 0) return false;
 
-  const res = await db.query(
-    `SELECT 1 FROM daily_winners
+const res = await db.query(
+`SELECT 1 FROM daily_winners
      WHERE guild_id=$1
        AND user_id=$2
        AND win_date >= (CURRENT_DATE - ($3::int * INTERVAL '1 day'))
      LIMIT 1`,
-    [guildId, userId, cooldownDays]
-  );
+[guildId, userId, cooldownDays]
+);
 
-  return res.rowCount > 0;
+return res.rowCount > 0;
 }
 
 async function resetWinners(guildId, scope = "today") {
