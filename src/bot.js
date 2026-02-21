@@ -211,7 +211,18 @@ if (!member) {
       ephemeral: true
     });
   }
+  
+if (commandName === "setgiveawaychannel") {
+  const channel = interaction.options.getChannel("channel");
 
+  await setGiveawayChannel(guild.id, channel.id);
+
+  return interaction.reply({
+    content: `✅ Giveaway winners will be posted in ${channel}`,
+    ephemeral: true
+  });
+}
+  
 if (commandName === "resetwinners") {
   const scope = interaction.options.getString("scope") || "today";
   const res = await resetWinners(guild.id, scope);
