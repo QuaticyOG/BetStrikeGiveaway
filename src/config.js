@@ -22,6 +22,13 @@ function getTimeWindows() {
   }));
 }
 
+PRIZES: [
+  { name: "Small Reward", emoji: "🪙", weight: 60 },
+  { name: "Medium Reward", emoji: "💵", weight: 25 },
+  { name: "Big Reward", emoji: "💎", weight: 10 },
+  { name: "JACKPOT", emoji: "🔥", weight: 5 }
+],
+
 module.exports = {
   BOT_TOKEN: mustGet("BOT_TOKEN"),
   DATABASE_URL: mustGet("DATABASE_URL"),
