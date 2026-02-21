@@ -39,11 +39,18 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-// 7-slot reel for proper centering
+// 7-slot reel
 function randomRow(emojis) {
   return Array.from({ length: 7 }, () =>
     emojis[Math.floor(Math.random() * emojis.length)]
   ).join(" ");
+}
+
+function asBlockquote(text) {
+  return text
+    .split("\n")
+    .map(line => `> ${line}`)
+    .join("\n");
 }
 
 function buildSpinner(row) {
@@ -57,6 +64,9 @@ function buildSpinner(row) {
 async function runCaseAnimation(channel, winner, prize) {
   const spinEmojis = cfg.PRIZES.map(p => p.emoji);
   const replayId = `replay_${winner.id}_${Date.now()}`;
+
+  // 🔒 per-user replay lock
+  const activeReplays = new Set();
 
   const msg = await channel.send({
     content: "🎰 Surprise Betstrike Case..."
@@ -82,12 +92,11 @@ async function runCaseAnimation(channel, winner, prize) {
       await sleep(250);
     }
 
-    // TRUE CENTERED FINAL ROW
+    // final row
     const finalRowArray = Array.from({ length: 7 }, () =>
       spinEmojis[Math.floor(Math.random() * spinEmojis.length)]
     );
 
-    // force prize to center slot
     finalRowArray[3] = prize.emoji;
     const finalRow = finalRowArray.join(" ");
 
@@ -102,8 +111,9 @@ async function runCaseAnimation(channel, winner, prize) {
       content: `
 <@${winner.id}> just got rewarded ${prize.emoji} **${prize.name}** for rocking the Betstrike tag 🔥
 
-> 🎰 **Betstrike Case**
-> ${buildSpinner(finalRow)}
+${asBlockquote(
+  `🎰 **Betstrike Case**\n\n${buildSpinner(finalRow)}`
+)}
 
 Stay active. Keep the tag. Win anytime. <a:emoji_name:1473066768749822004>
 `,
@@ -124,41 +134,49 @@ Stay active. Keep the tag. Win anytime. <a:emoji_name:1473066768749822004>
   collector.on("collect", async interaction => {
     if (interaction.customId !== replayId) return;
 
-    // only winner can replay
-    if (interaction.user.id !== winner.id) {
+    // 🔒 prevent spam per user
+    if (activeReplays.has(interaction.user.id)) {
       return interaction.reply({
-        content: "Only the winner can replay this case.",
+        content: "Your replay is already running.",
         ephemeral: true
       });
     }
 
-    await interaction.reply({
-      content: "🎰 Replaying your case...",
-      ephemeral: true
-    });
+    activeReplays.add(interaction.user.id);
 
-    // private fast spin
-    for (let i = 0; i < 6; i++) {
-      const row = randomRow(spinEmojis);
+    try {
+      await interaction.reply({
+        content: "🎰 Replaying your case...",
+        ephemeral: true
+      });
 
-      await interaction.editReply(
-        `🎰 Replaying your case...\n\n${buildSpinner(row)}`
+      // fast spin
+      for (let i = 0; i < 6; i++) {
+        const row = randomRow(spinEmojis);
+
+        await interaction.editReply(
+          `🎰 Replaying your case...\n\n${buildSpinner(row)}`
+        );
+
+        await sleep(120);
+      }
+
+      // final landing
+      const finalRowArray = Array.from({ length: 7 }, () =>
+        spinEmojis[Math.floor(Math.random() * spinEmojis.length)]
       );
 
-      await sleep(120);
+      finalRowArray[3] = prize.emoji;
+      const finalRow = finalRowArray.join(" ");
+
+      await interaction.editReply(
+        `🎰 **Replay Result**\n\n${asBlockquote(
+          buildSpinner(finalRow)
+        )}\n\n🏆 Case reward: ${prize.emoji} **${prize.name}**`
+      );
+    } finally {
+      activeReplays.delete(interaction.user.id);
     }
-
-    // private final landing
-    const finalRowArray = Array.from({ length: 7 }, () =>
-      spinEmojis[Math.floor(Math.random() * spinEmojis.length)]
-    );
-
-    finalRowArray[3] = prize.emoji;
-    const finalRow = finalRowArray.join(" ");
-
-    await interaction.editReply(
-      `🎰 **Replay Result**\n\n${buildSpinner(finalRow)}\n\n🏆 You won: ${prize.emoji} **${prize.name}**`
-    );
   });
 
   collector.on("end", async () => {
