@@ -2,12 +2,12 @@
 const {
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  EmbedBuilder,
+  MessageFlags
 } = require("discord.js");
 const db = require("./db");
 const cfg = require("./config");
-const { EmbedBuilder } = require("discord.js");
-const { MessageFlags } = require("discord.js");
 const { isEligible } = require("./eligibility");
 
 function todayISODateUTC() {
@@ -23,16 +23,16 @@ function pickWeightedPrize(prizes = []) {
     throw new Error("PRIZES config is missing or empty");
   }
 
-  const total = prizes.reduce((sum, p) => sum + p.weight, 0);
+  const total = prizes.reduce((sum, p) => sum + (p.weight || 0), 0);
   let roll = Math.random() * total;
 
   for (const prize of prizes) {
-    if (roll < prize.weight) return prize;
-    roll -= prize.weight;
+    const w = prize.weight || 0;
+    if (roll < w) return prize;
+    roll -= w;
   }
   return prizes[0];
 }
-
 
 /* ------------------------------------------------ */
 /*                 DATE AND TIME LOG                */
@@ -75,7 +75,6 @@ function getWindow(strip, start, size = 7) {
 
 // Lower = arrows move LEFT, higher = RIGHT
 const ARROW_PAD_PER_SLOT = 3;
-
 // Fine-tune by 0..6 without changing slot scaling
 const ARROW_PAD_OFFSET = 0;
 
@@ -83,20 +82,16 @@ function buildSpinner(row) {
   const parts = row.split(" ");
   const centerIndex = Math.floor(parts.length / 2); // 7 slots => 3 (4th emoji)
 
-  const padCount = (centerIndex * ARROW_PAD_PER_SLOT) + ARROW_PAD_OFFSET;
+  const padCount = centerIndex * ARROW_PAD_PER_SLOT + ARROW_PAD_OFFSET;
   const arrowPad = "\u2800".repeat(Math.max(0, padCount));
 
   const frameSide = 10;
   const topBorder = "━".repeat(frameSide) + "⊱⋆⊰" + "━".repeat(frameSide);
   const bottomBorder = "━".repeat(frameSide * 2 + 3);
 
-  return [
-    topBorder,
-    arrowPad + "▼",
-    row,
-    arrowPad + "▲",
-    bottomBorder
-  ].join("\n");
+  return [topBorder, arrowPad + "▼", row, arrowPad + "▲", bottomBorder].join(
+    "\n"
+  );
 }
 
 function glowCenter(row) {
@@ -113,11 +108,19 @@ function glowCenter(row) {
 async function runCaseAnimation(channel, winner, prize) {
   const spinEmojis = cfg.PRIZES.map(p => p.emoji);
   const replayId = `replay_${winner.id}_${Date.now()}`;
+
+  // anyone can replay, but prevent each user from multi-click spamming
   const activeReplays = new Set();
 
+  // customize these if you change case emoji / thumbnail
+  const CASE_EMOJI = "<:case:1474816589659504701>";
+  const CASE_THUMB = "https://cdn.discordapp.com/emojis/1474816589659504701.png";
+
   const msg = await channel.send({
-    content: "<:case:1474816589659504701> Surprise Betstrike Case..."
+    content: `${CASE_EMOJI} Surprise Betstrike Case...`
   });
+
+  let sharedFinalRowGlowed = null;
 
   // ---------- PUBLIC PREMIUM SPIN ----------
   async function playPublicAnimation() {
@@ -130,9 +133,18 @@ async function runCaseAnimation(channel, winner, prize) {
 
     for (const delay of speeds) {
       const windowRow = getWindow(strip, position);
-     await msg.edit(
-      `<:case:1474816589659504701> **Surprise Betstrike Case...**\n\n${buildSpinner(windowRow)}`
-      );
+
+      const spinEmbed = new EmbedBuilder()
+        .setTitle(`${CASE_EMOJI} Surprise Betstrike Case...`)
+        .setDescription(asBlockquote(buildSpinner(windowRow)))
+        .setThumbnail(CASE_THUMB);
+
+      await msg.edit({
+        content: null,
+        embeds: [spinEmbed],
+        components: []
+      });
+
       position++;
       await sleep(delay);
     }
@@ -144,7 +156,7 @@ async function runCaseAnimation(channel, winner, prize) {
     finalArray[3] = prize.emoji;
 
     const finalRowPlain = finalArray.join(" ");
-    const finalRowGlowed = glowCenter(finalRowPlain);
+    sharedFinalRowGlowed = glowCenter(finalRowPlain);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -153,23 +165,21 @@ async function runCaseAnimation(channel, winner, prize) {
         .setStyle(ButtonStyle.Secondary)
     );
 
-    // store for replay via closure
-    playPublicAnimation.finalRowGlowed = finalRowGlowed;
+    const embed = new EmbedBuilder()
+      .setColor("#A26BFF")
+      .setTitle("Betstrike Case")
+      .setDescription(
+        `<@${winner.id}> just got rewarded ${prize.emoji} **${prize.name}** for rocking the Betstrike tag 🔥\n\n` +
+          asBlockquote(buildSpinner(sharedFinalRowGlowed)) +
+          `\n\nStay active. Keep the tag. Win anytime.`
+      )
+      .setThumbnail(CASE_THUMB);
 
-const embed = new EmbedBuilder()
-  .setTitle("Betstrike Case")
-  .setDescription(
-    `<@${winner.id}> just got rewarded ${prize.emoji} **${prize.name}** for rocking the Betstrike tag 🔥\n\n` +
-    asBlockquote(buildSpinner(finalRowGlowed)) +
-    `\n\nStay active. Keep the tag. Win anytime.`
-  )
-  .setThumbnail("https://cdn.discordapp.com/emojis/1474816589659504701.png");
-
-await msg.edit({
-  content: null, // ⭐ REQUIRED — clears spinner text
-  embeds: [embed],
-  components: [row]
-});
+    await msg.edit({
+      content: null, // clears any old spinner text
+      embeds: [embed],
+      components: [row]
+    });
   }
 
   await playPublicAnimation();
@@ -182,55 +192,59 @@ await msg.edit({
     time: 5 * 60 * 1000
   });
 
-collector.on("collect", async interaction => {
-  if (interaction.customId !== replayId) return;
+  collector.on("collect", async interaction => {
+    if (interaction.customId !== replayId) return;
 
-  // 🚀 acknowledge immediately
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    // 🚀 acknowledge immediately
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  // anti-spam
-  if (activeReplays.has(interaction.user.id)) {
-    return interaction.editReply({
-      content: "Your replay is already running."
-    });
-  }
-
-  activeReplays.add(interaction.user.id);
-
-  try {
-    await interaction.editReply({
-      content: "<:case:1474816589659504701> Replaying case..."
-    });
-
-    const strip = buildReelStrip(spinEmojis, 60);
-    const winIndex = Math.floor(strip.length * 0.75);
-    strip[winIndex] = prize.emoji;
-
-    let position = 0;
-    const speeds = [70, 85, 100, 130, 170, 230, 300];
-
-    for (const delay of speeds) {
-      const windowRow = getWindow(strip, position);
-
-      await interaction.editReply(
-        `<:case:1474816589659504701> Replaying case...\n\n${buildSpinner(windowRow)}`
-      );
-
-      position++;
-      await sleep(delay);
+    // anti-spam per user
+    if (activeReplays.has(interaction.user.id)) {
+      return interaction.editReply({ content: "Your replay is already running." });
     }
+    activeReplays.add(interaction.user.id);
 
-    const finalRowGlowed = playPublicAnimation.finalRowGlowed;
+    try {
+      const strip = buildReelStrip(spinEmojis, 60);
+      const winIndex = Math.floor(strip.length * 0.75);
+      strip[winIndex] = prize.emoji;
 
-    await interaction.editReply(
-      `<:case:1474816589659504701> **Replay Result**\n\n${asBlockquote(
-        buildSpinner(finalRowGlowed)
-      )}\n\n🏆 Case reward: ${prize.emoji} **${prize.name}**`
-    );
-  } finally {
-    activeReplays.delete(interaction.user.id);
-  }
-});
+      let position = 0;
+      const speeds = [70, 85, 100, 130, 170, 230, 300];
+
+      for (const delay of speeds) {
+        const windowRow = getWindow(strip, position);
+
+        const replaySpinEmbed = new EmbedBuilder()
+          .setTitle(`${CASE_EMOJI} Replaying case...`)
+          .setDescription(asBlockquote(buildSpinner(windowRow)))
+          .setThumbnail(CASE_THUMB);
+
+        await interaction.editReply({
+          content: null,
+          embeds: [replaySpinEmbed]
+        });
+
+        position++;
+        await sleep(delay);
+      }
+
+      const replayFinalEmbed = new EmbedBuilder()
+        .setTitle(`${CASE_EMOJI} Replay Result`)
+        .setDescription(
+          asBlockquote(buildSpinner(sharedFinalRowGlowed || ""))
+            + `\n\n🏆 Case reward: ${prize.emoji} **${prize.name}**`
+        )
+        .setThumbnail(CASE_THUMB);
+
+      await interaction.editReply({
+        content: null,
+        embeds: [replayFinalEmbed]
+      });
+    } finally {
+      activeReplays.delete(interaction.user.id);
+    }
+  });
 
   collector.on("end", async () => {
     try {
@@ -250,10 +264,9 @@ async function getOrCreateConfig(guildId) {
     "INSERT INTO bot_config (guild_id) VALUES ($1) ON CONFLICT (guild_id) DO NOTHING",
     [guildId]
   );
-  const res = await db.query(
-    "SELECT * FROM bot_config WHERE guild_id=$1",
-    [guildId]
-  );
+  const res = await db.query("SELECT * FROM bot_config WHERE guild_id=$1", [
+    guildId
+  ]);
   return res.rows[0];
 }
 
@@ -282,12 +295,8 @@ async function setWinnersLogChannel(guildId, channelId) {
 }
 
 function findEligibleRole(guild) {
-  if (cfg.ELIGIBLE_ROLE_ID)
-    return guild.roles.cache.get(cfg.ELIGIBLE_ROLE_ID) || null;
-
-  return guild.roles.cache.find(
-    r => r.name === cfg.ELIGIBLE_ROLE_NAME
-  ) || null;
+  if (cfg.ELIGIBLE_ROLE_ID) return guild.roles.cache.get(cfg.ELIGIBLE_ROLE_ID) || null;
+  return guild.roles.cache.find(r => r.name === cfg.ELIGIBLE_ROLE_NAME) || null;
 }
 
 async function hasWonToday(guildId, userId, winDateUTC) {
@@ -315,10 +324,9 @@ async function hasWonWithinCooldown(guildId, userId, cooldownDays) {
 
 async function resetWinners(guildId, scope = "today") {
   if (scope === "all") {
-    const res = await db.query(
-      "DELETE FROM daily_winners WHERE guild_id=$1",
-      [guildId]
-    );
+    const res = await db.query("DELETE FROM daily_winners WHERE guild_id=$1", [
+      guildId
+    ]);
     return { deleted: "all", rows: res.rowCount };
   }
 
@@ -336,13 +344,15 @@ async function resetWinners(guildId, scope = "today") {
 
 async function pickWinner(client, guild) {
   const conf = await getOrCreateConfig(guild.id);
-  if (!conf.giveaways_running)
+  if (!conf.giveaways_running) {
     return { winner: null, reason: "Giveaways are stopped." };
+  }
 
   const winDateUTC = todayISODateUTC();
   const role = findEligibleRole(guild);
-  if (!role)
+  if (!role) {
     return { winner: null, reason: "Eligible role not found." };
+  }
 
   if (role.members.size === 0) {
     try {
@@ -356,22 +366,15 @@ async function pickWinner(client, guild) {
   const eligible = [];
   for (const [, member] of role.members) {
     if (await hasWonToday(guild.id, member.id, winDateUTC)) continue;
-    if (
-      await hasWonWithinCooldown(
-        guild.id,
-        member.id,
-        cfg.WIN_COOLDOWN_DAYS
-      )
-    )
-      continue;
+    if (await hasWonWithinCooldown(guild.id, member.id, cfg.WIN_COOLDOWN_DAYS)) continue;
     if (await isEligible(member)) eligible.push(member);
   }
 
-  if (eligible.length === 0)
+  if (eligible.length === 0) {
     return { winner: null, reason: "No eligible members found." };
+  }
 
-  const winner =
-    eligible[Math.floor(Math.random() * eligible.length)];
+  const winner = eligible[Math.floor(Math.random() * eligible.length)];
 
   await db.query(
     "INSERT INTO daily_winners (guild_id,user_id,win_date) VALUES ($1,$2,$3::date) ON CONFLICT DO NOTHING",
@@ -379,40 +382,38 @@ async function pickWinner(client, guild) {
   );
 
   // 🎁 Pick prize
-const prize = pickWeightedPrize(cfg.PRIZES);
+  const prize = pickWeightedPrize(cfg.PRIZES);
 
-// 🎰 Public animation
-const publicChannelId = conf.giveaway_channel_id;
-const publicChannel = publicChannelId
-  ? guild.channels.cache.get(publicChannelId)
-  : null;
+  // 🎰 Public animation
+  const publicChannelId = conf.giveaway_channel_id;
+  const publicChannel = publicChannelId
+    ? guild.channels.cache.get(publicChannelId)
+    : null;
 
-if (publicChannel) {
-  await runCaseAnimation(publicChannel, winner, prize);
-}
-
-// 🧾 Winner log
-const logChannelId = conf.log_channel_id;
-const logChannel = logChannelId
-  ? guild.channels.cache.get(logChannelId)
-  : null;
-
-if (logChannel) {
-  try {
-await logChannel.send({
-  content:
-    `🏆 **Winner Drawn**\n` +
-    `User: <@${winner.id}>\n` +
-    `Prize: ${prize.emoji} **${prize.name}**\n` +
-    `Date: ${winDateUTC}\n` +
-    `Time: ${nowOsloTime()} UTC+1`
-});
-  } catch (err) {
-    console.error("Failed to send winner log:", err);
+  if (publicChannel) {
+    await runCaseAnimation(publicChannel, winner, prize);
   }
-}
 
-return { winner, reason: null };
+  // 🧾 Winner log
+  const logChannelId = conf.log_channel_id;
+  const logChannel = logChannelId ? guild.channels.cache.get(logChannelId) : null;
+
+  if (logChannel) {
+    try {
+      await logChannel.send({
+        content:
+          `🏆 **Winner Drawn**\n` +
+          `User: <@${winner.id}>\n` +
+          `Prize: ${prize.emoji} **${prize.name}**\n` +
+          `Date: ${winDateUTC}\n` +
+          `Time: ${nowOsloTime()} UTC+1`
+      });
+    } catch (err) {
+      console.error("Failed to send winner log:", err);
+    }
+  }
+
+  return { winner, reason: null };
 }
 
 module.exports = {
