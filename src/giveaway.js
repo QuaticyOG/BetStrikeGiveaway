@@ -87,13 +87,11 @@ await msg.edit({
   content:
 `🎉 **<@${winner.id}> just got rewarded for rocking the Betstrike tag 🔥**
 
-╔════════ 🎰 Betstrike Case ════════╗
-   ${finalRow}
-╚═══════════════════════════════════╝
+> 🎰 **Betstrike Case**
+> ${finalRow}
 
 ━━━━━━━━━━━━━━━━━━━━━━
-🏆 **YOU WON**
-✨ ${prize.emoji} **${prize.name}**
+🏆 **YOU WON** ${prize.emoji} **${prize.name}**
 ━━━━━━━━━━━━━━━━━━━━━━
 
 Stay active. Keep the tag. Win anytime. <a:emoji_name:1473066768749822004>`,
