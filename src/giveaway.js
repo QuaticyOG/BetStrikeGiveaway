@@ -355,17 +355,40 @@ async function pickWinner(client, guild) {
     [guild.id, winner.id, winDateUTC]
   );
 
-  const publicChannelId = conf.giveaway_channel_id;
-  const publicChannel = publicChannelId
-    ? guild.channels.cache.get(publicChannelId)
-    : null;
+  // 🎁 Pick prize
+const prize = pickWeightedPrize(cfg.PRIZES);
 
-  if (publicChannel) {
-    const prize = pickWeightedPrize(cfg.PRIZES);
-    await runCaseAnimation(publicChannel, winner, prize);
+// 🎰 Public animation
+const publicChannelId = conf.giveaway_channel_id;
+const publicChannel = publicChannelId
+  ? guild.channels.cache.get(publicChannelId)
+  : null;
+
+if (publicChannel) {
+  await runCaseAnimation(publicChannel, winner, prize);
+}
+
+// 🧾 Winner log
+const logChannelId = conf.log_channel_id;
+const logChannel = logChannelId
+  ? guild.channels.cache.get(logChannelId)
+  : null;
+
+if (logChannel) {
+  try {
+    await logChannel.send({
+      content:
+        `🏆 **Winner Drawn**\n` +
+        `User: <@${winner.id}>\n` +
+        `Prize: ${prize.emoji} **${prize.name}**\n` +
+        `Date: ${winDateUTC}`
+    });
+  } catch (err) {
+    console.error("Failed to send winner log:", err);
   }
+}
 
-  return { winner, reason: null };
+return { winner, reason: null };
 }
 
 module.exports = {
