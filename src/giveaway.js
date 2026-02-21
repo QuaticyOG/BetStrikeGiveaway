@@ -115,9 +115,10 @@ async function runCaseAnimation(channel, winner, prize) {
   // customize these if you change case emoji / thumbnail
   const CASE_EMOJI = "<:case:1474816589659504701>";
   const CASE_THUMB = "https://cdn.discordapp.com/emojis/1474816589659504701.png";
+  const CASEOPEN_THUMB = "https://cdn.discordapp.com/emojis/1474829744544419933.png";
 
   const msg = await channel.send({
-    content: `${CASE_EMOJI} Surprise Betstrike Case...`
+    content: `${CASE_EMOJI} Sudden Case Opening!`
   });
 
   let sharedFinalRowGlowed = null;
@@ -135,7 +136,8 @@ async function runCaseAnimation(channel, winner, prize) {
       const windowRow = getWindow(strip, position);
 
       const spinEmbed = new EmbedBuilder()
-        .setTitle(`${CASE_EMOJI} Surprise Betstrike Case...`)
+        .setColor("#A26BFF")
+        .setTitle(`${CASE_EMOJI} Sudden Case Opening`)
         .setDescription(asBlockquote(buildSpinner(windowRow)))
         .setThumbnail(CASE_THUMB);
 
@@ -167,13 +169,13 @@ async function runCaseAnimation(channel, winner, prize) {
 
     const embed = new EmbedBuilder()
       .setColor("#A26BFF")
-      .setTitle("Betstrike Case")
+      .setTitle("Betstrike Case Opened!")
       .setDescription(
         `<@${winner.id}> just got rewarded ${prize.emoji} **${prize.name}** for rocking the Betstrike tag 🔥\n\n` +
           asBlockquote(buildSpinner(sharedFinalRowGlowed)) +
           `\n\nStay active. Keep the tag. Win anytime.`
       )
-      .setThumbnail(CASE_THUMB);
+      .setThumbnail(CASEOPEN_THUMB);
 
     await msg.edit({
       content: null, // clears any old spinner text
@@ -216,7 +218,8 @@ async function runCaseAnimation(channel, winner, prize) {
         const windowRow = getWindow(strip, position);
 
         const replaySpinEmbed = new EmbedBuilder()
-          .setTitle(`${CASE_EMOJI} Replaying case...`)
+          .setColor("#A26BFF")
+          .setTitle(`Replaying case...`)
           .setDescription(asBlockquote(buildSpinner(windowRow)))
           .setThumbnail(CASE_THUMB);
 
@@ -230,12 +233,13 @@ async function runCaseAnimation(channel, winner, prize) {
       }
 
       const replayFinalEmbed = new EmbedBuilder()
-        .setTitle(`${CASE_EMOJI} Replay Result`)
+        .setColor("#A26BFF")
+        .setTitle(`Replay Result`)
         .setDescription(
           asBlockquote(buildSpinner(sharedFinalRowGlowed || ""))
             + `\n\n🏆 Case reward: ${prize.emoji} **${prize.name}**`
         )
-        .setThumbnail(CASE_THUMB);
+        .setThumbnail(CASEOPEN_THUMB);
 
       await interaction.editReply({
         content: null,
