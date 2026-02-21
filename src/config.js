@@ -51,10 +51,10 @@ module.exports = {
 
   // ✅ ADD IT HERE
   PRIZES: [
-    { name: "Small Reward", emoji: "🪙", weight: 40 },
-    { name: "Medium Reward", emoji: "💵", weight: 30 },
-    { name: "Big Reward", emoji: "💎", weight: 20 },
-    { name: "JACKPOT", emoji: "🔥", weight: 10 }
+    { name: "Reward 1", emoji: "<:pink:1474813683262816296>", weight: 40 },
+    { name: "Reward 2", emoji: "<:red:1474813765504598269>", weight: 30 },
+    { name: "Reward 3", emoji: "<:white:1474813792880951380>", weight: 20 },
+    { name: "Reward 4", emoji: "<:yellow:1474813739374219335>", weight: 10 }
   ],
 
   GUILD_ID: process.env.GUILD_ID || ""
