@@ -195,7 +195,7 @@ collector.on("collect", async interaction => {
 
   try {
     await interaction.editReply({
-      content: "<:case:1474816589659504701> Replaying your case..."
+      content: "<:case:1474816589659504701> Replaying case..."
     });
 
     const strip = buildReelStrip(spinEmojis, 60);
@@ -209,7 +209,7 @@ collector.on("collect", async interaction => {
       const windowRow = getWindow(strip, position);
 
       await interaction.editReply(
-        `🎰 Replaying case...\n\n${buildSpinner(windowRow)}`
+        `<:case:1474816589659504701> Replaying case...\n\n${buildSpinner(windowRow)}`
       );
 
       position++;
