@@ -139,10 +139,13 @@ client.on("interactionCreate", async interaction => {
   // --------------------
   if (commandName === "eligibility") {
     const user = interaction.options.getUser("user");
-    const member = await guild.members.fetch(user.id).catch(() => null);
-    if (!member) {
-      return interaction.reply({ content: "❌ User not found.", ephemeral: true });
-    }
+// get target user (default to self)
+const targetUser = interaction.options.getUser("user") || interaction.user;
+
+const member = await guild.members.fetch(targetUser.id).catch(() => null);
+if (!member) {
+  return interaction.reply({ content: "❌ User not found.", ephemeral: true });
+}
 
     const now = Date.now();
     const check = v => (v ? "✅" : "❌");
@@ -168,7 +171,7 @@ client.on("interactionCreate", async interaction => {
     const strikerHeldMs = assignedAt ? now - new Date(assignedAt).getTime() : 0;
 
     const embed = new EmbedBuilder()
-      .setTitle(`Eligibility: ${member.user.tag}`)
+      .setTitle(`Eligibility: ${targetUser.tag}`)
       .setDescription((await isEligible(member)) ? "✅ **Eligible**" : "❌ **Not Eligible**")
       .addFields(
         { name: "In server ≥ 7 days", value: `${check(inServerMs >= 7 * 86400000)} (${days(inServerMs)})` },
