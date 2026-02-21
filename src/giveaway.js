@@ -54,19 +54,19 @@ function asBlockquote(text) {
 }
 
 function buildSpinner(row) {
-  // Estimate visual width of the row
-  const visualWidth = row.length;
+  const slots = row.split(" ").length;
 
-  // Center arrow in the middle of the full row width
-  const padSize = Math.max(0, Math.floor(visualWidth / 2) - 1);
-
+  // tuned visual center for Discord emoji rows
+  const padSize = Math.floor(slots * 1.75);
   const pad = "\u2800".repeat(padSize);
 
-  return (
-    pad + "▼\n" +
-    row + "\n" +
-    pad + "▲"
-  );
+  return [
+    "━━━━━━━━━━━⊱⋆⊰━━━━━━━━━",
+    pad + "▼",
+    row,
+    pad + "▲",
+    "━━━━━━━━━━━━━━━━━━━━━━━━"
+  ].join("\n");
 }
 
 async function runCaseAnimation(channel, winner, prize) {
