@@ -6,6 +6,7 @@ const {
 } = require("discord.js");
 const db = require("./db");
 const cfg = require("./config");
+const { EmbedBuilder } = require("discord.js");
 const { isEligible } = require("./eligibility");
 
 function todayISODateUTC() {
@@ -154,18 +155,19 @@ async function runCaseAnimation(channel, winner, prize) {
     // store for replay via closure
     playPublicAnimation.finalRowGlowed = finalRowGlowed;
 
-    await msg.edit({
-      content: `
-<@${winner.id}> just got rewarded ${prize.emoji} **${prize.name}** for rocking the Betstrike tag 🔥
+const embed = new EmbedBuilder()
+  .setTitle("Betstrike Case")
+  .setDescription(
+    `<@${winner.id}> just got rewarded ${prize.emoji} **${prize.name}** for rocking the Betstrike tag 🔥\n\n` +
+    asBlockquote(buildSpinner(finalRowGlowed)) +
+    `\n\nStay active. Keep the tag. Win anytime.`
+  )
+  .setThumbnail("https://cdn.discordapp.com/emojis/1474816589659504701.png");
 
-${asBlockquote(
-  `<:case:1474816589659504701> **Betstrike Case**\n\n${buildSpinner(finalRowGlowed)}`
-)}
-
-Stay active. Keep the tag. Win anytime. <a:emoji_name:1473066768749822004>
-`,
-      components: [row]
-    });
+await msg.edit({
+  embeds: [embed],
+  components: [row]
+});
   }
 
   await playPublicAnimation();
