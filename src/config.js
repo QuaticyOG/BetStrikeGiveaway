@@ -22,19 +22,11 @@ function getTimeWindows() {
   }));
 }
 
-PRIZES: [
-  { name: "Small Reward", emoji: "🪙", weight: 60 },
-  { name: "Medium Reward", emoji: "💵", weight: 25 },
-  { name: "Big Reward", emoji: "💎", weight: 10 },
-  { name: "JACKPOT", emoji: "🔥", weight: 5 }
-],
-
 module.exports = {
   BOT_TOKEN: mustGet("BOT_TOKEN"),
   DATABASE_URL: mustGet("DATABASE_URL"),
 
-  // Base pool role (used to enumerate candidates efficiently)
-  // In your case this should be your "striker" role.
+  // Base pool role
   ELIGIBLE_ROLE_ID: process.env.ELIGIBLE_ROLE_ID || "",
   ELIGIBLE_ROLE_NAME: process.env.ELIGIBLE_ROLE_NAME || "striker",
 
@@ -46,7 +38,6 @@ module.exports = {
 
   WIN_COOLDOWN_DAYS: Number(process.env.WIN_COOLDOWN_DAYS ?? 4),
 
-  
   MIN_MESSAGES: Number(process.env.MIN_MESSAGES ?? 0),
   MIN_DAYS_IN_SERVER: Number(process.env.MIN_DAYS_IN_SERVER ?? 7),
   MIN_ACCOUNT_AGE_DAYS: Number(process.env.MIN_ACCOUNT_AGE_DAYS ?? 60),
@@ -57,6 +48,14 @@ module.exports = {
 
   GIVEAWAY_MESSAGE: process.env.GIVEAWAY_MESSAGE || "🎉 Congratulations {user}!",
   GIVEAWAY_COLOR: process.env.GIVEAWAY_COLOR || "#9e6bff",
+
+  // ✅ ADD IT HERE
+  PRIZES: [
+    { name: "Small Reward", emoji: "🪙", weight: 60 },
+    { name: "Medium Reward", emoji: "💵", weight: 25 },
+    { name: "Big Reward", emoji: "💎", weight: 10 },
+    { name: "JACKPOT", emoji: "🔥", weight: 5 }
+  ],
 
   GUILD_ID: process.env.GUILD_ID || ""
 };
