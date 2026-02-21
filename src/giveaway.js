@@ -7,6 +7,7 @@ const {
 const db = require("./db");
 const cfg = require("./config");
 const { EmbedBuilder } = require("discord.js");
+const { MessageFlags } = require("discord.js");
 const { isEligible } = require("./eligibility");
 
 function todayISODateUTC() {
@@ -165,6 +166,7 @@ const embed = new EmbedBuilder()
   .setThumbnail("https://cdn.discordapp.com/emojis/1474816589659504701.png");
 
 await msg.edit({
+  content: null, // ⭐ REQUIRED — clears spinner text
   embeds: [embed],
   components: [row]
 });
@@ -184,7 +186,7 @@ collector.on("collect", async interaction => {
   if (interaction.customId !== replayId) return;
 
   // 🚀 acknowledge immediately
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   // anti-spam
   if (activeReplays.has(interaction.user.id)) {
