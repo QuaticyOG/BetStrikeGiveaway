@@ -212,13 +212,23 @@ if (!member) {
     });
   }
 
-  if (commandName === "resetwinners") {
-    const scope = interaction.options.getString("scope") || "today";
-    const res = await resetWinners(guild.id, scope);
-    return interaction.reply({ content: `♻️ Reset (${res.deleted})`, ephemeral: true });
-  }
-});
+if (commandName === "resetwinners") {
+  const scope = interaction.options.getString("scope") || "today";
+  const res = await resetWinners(guild.id, scope);
+  return interaction.reply({ content: `♻️ Reset (${res.deleted})`, ephemeral: true });
+}
 
+if (commandName === "setwinnerlog") {
+  const channel = interaction.options.getChannel("channel");
+
+  await setWinnersLogChannel(guild.id, channel.id);
+
+  return interaction.reply({
+    content: `✅ Winner logs will be sent to ${channel}`,
+    ephemeral: true
+  });
+}
+  
 // --------------------
 // Login
 // --------------------
