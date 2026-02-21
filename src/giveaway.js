@@ -54,10 +54,18 @@ function asBlockquote(text) {
 }
 
 function buildSpinner(row) {
+  // Estimate visual width of the row
+  const visualWidth = row.length;
+
+  // Center arrow in the middle of the full row width
+  const padSize = Math.max(0, Math.floor(visualWidth / 2) - 1);
+
+  const pad = "\u2800".repeat(padSize);
+
   return (
-    "⠀⠀⠀⠀⠀⠀▼⠀⠀⠀⠀⠀⠀\n" +
+    pad + "▼\n" +
     row + "\n" +
-    "⠀⠀⠀⠀⠀⠀▲⠀⠀⠀⠀⠀⠀"
+    pad + "▲"
   );
 }
 
