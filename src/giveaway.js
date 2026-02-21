@@ -54,12 +54,13 @@ function asBlockquote(text) {
 }
 
 function buildSpinner(row) {
-  const slots = row.split(" ").length;
+  const parts = row.split(" ");
+  const centerIndex = Math.floor(parts.length / 2);
 
-  // Visual tuning for Discord emoji width
-  const arrowPad = "\u2800".repeat(Math.floor(slots * 1.75));
+  // Each emoji + space ≈ 2 visual units in Discord
+  const arrowPad = "\u2800".repeat(centerIndex * 2);
 
-  // Build dynamic frame width based on row length
+  // Dynamic frame sizing (keep your nice frame)
   const rowWidth = row.length;
   const side = Math.max(8, Math.floor(rowWidth / 2) - 2);
 
