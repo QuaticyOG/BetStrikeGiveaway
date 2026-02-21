@@ -56,12 +56,18 @@ function getWindow(strip, start, size = 7) {
   return strip.slice(start, start + size).join(" ");
 }
 
-const ARROW_PAD_PER_SLOT = 6;
+// Lower = arrows move LEFT, higher = RIGHT
+const ARROW_PAD_PER_SLOT = 3;
+
+// Fine-tune by 0..6 without changing slot scaling
+const ARROW_PAD_OFFSET = 0;
 
 function buildSpinner(row) {
   const parts = row.split(" ");
-  const centerIndex = Math.floor(parts.length / 2);
-  const arrowPad = "\u2800".repeat(centerIndex * ARROW_PAD_PER_SLOT);
+  const centerIndex = Math.floor(parts.length / 2); // 7 slots => 3 (4th emoji)
+
+  const padCount = (centerIndex * ARROW_PAD_PER_SLOT) + ARROW_PAD_OFFSET;
+  const arrowPad = "\u2800".repeat(Math.max(0, padCount));
 
   const frameSide = 10;
   const topBorder = "━".repeat(frameSide) + "⊱⋆⊰" + "━".repeat(frameSide);
@@ -79,7 +85,7 @@ function buildSpinner(row) {
 function glowCenter(row) {
   const parts = row.split(" ");
   const mid = Math.floor(parts.length / 2);
-  parts[mid] = `✨${parts[mid]}✨`;
+  parts[mid] = `【${parts[mid]}】`;
   return parts.join(" ");
 }
 
