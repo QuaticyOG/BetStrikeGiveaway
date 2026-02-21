@@ -118,7 +118,7 @@ async function runCaseAnimation(channel, winner, prize) {
   const CASEOPEN_THUMB = "https://cdn.discordapp.com/emojis/1474829744544419933.png";
 
   const msg = await channel.send({
-    content: `${CASE_EMOJI} Sudden Case Opening!`
+    content: `Sudden Case Opening!`
   });
 
   let sharedFinalRowGlowed = null;
@@ -137,7 +137,7 @@ async function runCaseAnimation(channel, winner, prize) {
 
       const spinEmbed = new EmbedBuilder()
         .setColor("#A26BFF")
-        .setTitle(`${CASE_EMOJI} Sudden Case Opening`)
+        .setTitle(`Sudden Case Opening!`)
         .setDescription(asBlockquote(buildSpinner(windowRow)))
         .setThumbnail(CASE_THUMB);
 
