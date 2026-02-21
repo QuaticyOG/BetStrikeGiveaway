@@ -48,9 +48,9 @@ function randomRow(emojis) {
 
 function buildSpinner(row) {
   return (
-    "⠀⠀⠀⠀⠀⠀⠀▼\n" +
+    "⠀⠀⠀⠀⠀⠀▼⠀⠀⠀⠀⠀⠀\n" +
     row + "\n" +
-    "⠀⠀⠀⠀⠀⠀⠀▲"
+    "⠀⠀⠀⠀⠀⠀▲⠀⠀⠀⠀⠀⠀"
   );
 }
 
