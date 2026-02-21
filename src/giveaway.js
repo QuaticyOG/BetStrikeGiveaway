@@ -63,7 +63,7 @@ async function runCaseAnimation(channel, winner, prize) {
         spinEmojis[Math.floor(Math.random() * spinEmojis.length)]
       ).join(" ");
 
-      await msg.edit(`🎰 Opening Betstrike Case...\n\n${row}`);
+      await msg.edit(`🎰 Surprise Betstrike Case...\n\n${row}`);
       await new Promise(r => setTimeout(r, 250));
     }
 
@@ -83,14 +83,22 @@ async function runCaseAnimation(channel, winner, prize) {
         .setStyle(ButtonStyle.Secondary)
     );
 
-    await msg.edit({
-      content:
-        `<@${winner.id}> just got rewarded for rocking the Betstrike tag 🔥\n\n` +
-        `${finalRow}\n\n` +
-        `🏆 **Prize:** ${prize.emoji} ${prize.name}\n\n` +
-        `Stay active. Keep the tag. Win anytime. <a:emoji_name:1473066768749822004>`,
-      components: [row]
-    });
+await msg.edit({
+  content:
+`🎉 **<@${winner.id}> just got rewarded for rocking the Betstrike tag 🔥**
+
+╔════════ 🎰 Betstrike Case ════════╗
+   ${finalRow}
+╚═══════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━
+🏆 **YOU WON**
+✨ ${prize.emoji} **${prize.name}**
+━━━━━━━━━━━━━━━━━━━━━━
+
+Stay active. Keep the tag. Win anytime. <a:emoji_name:1473066768749822004>`,
+  components: [row]
+});
   }
 
   await playAnimation();
