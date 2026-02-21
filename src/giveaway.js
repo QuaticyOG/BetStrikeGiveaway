@@ -46,30 +46,26 @@ function asBlockquote(text) {
     .join("\n");
 }
 
-// build long strip
 function buildReelStrip(emojis, length = 40) {
   return Array.from({ length }, () =>
     emojis[Math.floor(Math.random() * emojis.length)]
   );
 }
 
-// take visible window
 function getWindow(strip, start, size = 7) {
   return strip.slice(start, start + size).join(" ");
 }
 
-// framed premium spinner
+const ARROW_PAD_PER_SLOT = 6;
+
 function buildSpinner(row) {
   const parts = row.split(" ");
   const centerIndex = Math.floor(parts.length / 2);
+  const arrowPad = "\u2800".repeat(centerIndex * ARROW_PAD_PER_SLOT);
 
-  const arrowPad = "\u2800".repeat(centerIndex * 2);
-
-  const rowWidth = row.length;
-  const side = Math.max(8, Math.floor(rowWidth / 2) - 2);
-
-  const topBorder = "━".repeat(side) + "⊱⋆⊰" + "━".repeat(side);
-  const bottomBorder = "━".repeat(side * 2 + 3);
+  const frameSide = 10;
+  const topBorder = "━".repeat(frameSide) + "⊱⋆⊰" + "━".repeat(frameSide);
+  const bottomBorder = "━".repeat(frameSide * 2 + 3);
 
   return [
     topBorder,
@@ -80,11 +76,10 @@ function buildSpinner(row) {
   ].join("\n");
 }
 
-// glow the center slot
 function glowCenter(row) {
   const parts = row.split(" ");
   const mid = Math.floor(parts.length / 2);
-  parts[mid] = `【${parts[mid]}】`;
+  parts[mid] = `✨${parts[mid]}✨`;
   return parts.join(" ");
 }
 
@@ -104,17 +99,11 @@ async function runCaseAnimation(channel, winner, prize) {
   // ---------- PUBLIC PREMIUM SPIN ----------
   async function playPublicAnimation() {
     const strip = buildReelStrip(spinEmojis, 60);
-
-    // force near-miss setup
     const winIndex = Math.floor(strip.length * 0.75);
     strip[winIndex] = prize.emoji;
 
     let position = 0;
-
-    // easing slowdown frames
-    const speeds = [
-      60, 70, 80, 95, 110, 130, 160, 200, 260, 320
-    ];
+    const speeds = [60, 70, 80, 95, 110, 130, 160, 200, 260, 320];
 
     for (const delay of speeds) {
       const windowRow = getWindow(strip, position);
@@ -125,13 +114,14 @@ async function runCaseAnimation(channel, winner, prize) {
       await sleep(delay);
     }
 
-    // final aligned row
+    // ✅ FINAL ROW GENERATED ONCE (shared with replay)
     const finalArray = Array.from({ length: 7 }, () =>
       spinEmojis[Math.floor(Math.random() * spinEmojis.length)]
     );
     finalArray[3] = prize.emoji;
 
-    const finalRow = glowCenter(finalArray.join(" "));
+    const finalRowPlain = finalArray.join(" ");
+    const finalRowGlowed = glowCenter(finalRowPlain);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -140,12 +130,15 @@ async function runCaseAnimation(channel, winner, prize) {
         .setStyle(ButtonStyle.Secondary)
     );
 
+    // store for replay via closure
+    playPublicAnimation.finalRowGlowed = finalRowGlowed;
+
     await msg.edit({
       content: `
 <@${winner.id}> just got rewarded ${prize.emoji} **${prize.name}** for rocking the Betstrike tag 🔥
 
 ${asBlockquote(
-  `🎰 **Betstrike Case**\n\n${buildSpinner(finalRow)}`
+  `🎰 **Betstrike Case**\n\n${buildSpinner(finalRowGlowed)}`
 )}
 
 Stay active. Keep the tag. Win anytime. <a:emoji_name:1473066768749822004>
@@ -167,7 +160,6 @@ Stay active. Keep the tag. Win anytime. <a:emoji_name:1473066768749822004>
   collector.on("collect", async interaction => {
     if (interaction.customId !== replayId) return;
 
-    // anti-spam per user
     if (activeReplays.has(interaction.user.id)) {
       return interaction.reply({
         content: "Your replay is already running.",
@@ -192,25 +184,18 @@ Stay active. Keep the tag. Win anytime. <a:emoji_name:1473066768749822004>
 
       for (const delay of speeds) {
         const windowRow = getWindow(strip, position);
-
         await interaction.editReply(
-          `🎰 Replaying your case...\n\n${buildSpinner(windowRow)}`
+          `🎰 Replaying case...\n\n${buildSpinner(windowRow)}`
         );
-
         position++;
         await sleep(delay);
       }
 
-      const finalArray = Array.from({ length: 7 }, () =>
-        spinEmojis[Math.floor(Math.random() * spinEmojis.length)]
-      );
-      finalArray[3] = prize.emoji;
-
-      const finalRow = glowCenter(finalArray.join(" "));
+      const finalRowGlowed = playPublicAnimation.finalRowGlowed;
 
       await interaction.editReply(
         `🎰 **Replay Result**\n\n${asBlockquote(
-          buildSpinner(finalRow)
+          buildSpinner(finalRowGlowed)
         )}\n\n🏆 Case reward: ${prize.emoji} **${prize.name}**`
       );
     } finally {
