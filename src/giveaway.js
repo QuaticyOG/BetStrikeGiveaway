@@ -233,18 +233,18 @@ return res.rowCount > 0;
 }
 
 async function hasWonWithinCooldown(guildId, userId, cooldownDays) {
-if (!cooldownDays || cooldownDays <= 0) return false;
+  if (!cooldownDays || cooldownDays <= 0) return false;
 
-const res = await db.query(
-SELECT 1 FROM daily_winners
+  const res = await db.query(
+    `SELECT 1 FROM daily_winners
      WHERE guild_id=$1
        AND user_id=$2
        AND win_date >= (CURRENT_DATE - ($3::int * INTERVAL '1 day'))
-     LIMIT 1,
-[guildId, userId, cooldownDays]
-);
+     LIMIT 1`,
+    [guildId, userId, cooldownDays]
+  );
 
-return res.rowCount > 0;
+  return res.rowCount > 0;
 }
 
 async function resetWinners(guildId, scope = "today") {
