@@ -47,7 +47,7 @@ process.on("uncaughtException", console.error);
 // --------------------
 // Ready
 // --------------------
-client.once("ready", async () => {
+client.once("clientReady", async () => {
   console.log(`Logged in as ${client.user.tag}`);
 
   const fs = require("fs");
@@ -204,13 +204,17 @@ if (!member) {
     return interaction.reply({ content: "🛑 Giveaways stopped.", ephemeral: true });
   }
 
-  if (commandName === "drawnow") {
-    const result = await pickWinner(client, guild);
-    return interaction.reply({
-      content: result.winner ? `🎉 <@${result.winner.id}>` : `❌ ${result.reason}`,
-      ephemeral: true
-    });
-  }
+if (commandName === "drawnow") {
+  await interaction.deferReply({ ephemeral: true });
+
+  const result = await pickWinner(client, guild);
+
+  return interaction.editReply({
+    content: result.winner
+      ? `🎉 <@${result.winner.id}>`
+      : `❌ ${result.reason}`
+  });
+}
   
 if (commandName === "setgiveawaychannel") {
   const channel = interaction.options.getChannel("channel");
