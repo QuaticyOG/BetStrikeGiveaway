@@ -1,5 +1,15 @@
 # Betstrike Giveaway Bot (PostgreSQL + Railway)
 
+
+## License & Usage
+
+⚠️ This project is for personal use only.
+
+You may NOT use, copy, modify, or distribute any part of this code
+without prior written permission.
+
+If you would like to use this project, please contact me.
+
 ## Features
 
 * Eligible winners must have **Striker** and **Level 5**
