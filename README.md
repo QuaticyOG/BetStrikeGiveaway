@@ -7,15 +7,20 @@
 * Min server join days & min account age checks
 * Weighted prize system
 * CS2-style case opening animation
-* Replay button (visual only, no reroll)
+* Premium horizontal reel with centered reward
+* Replay button (private replay, no reroll)
 * Random draws inside daily time windows
 * No repeat winner in the same day
+* Configurable giveaway channel
+* Configurable winner log channel
+* PostgreSQL persistent tracking
 * Slash commands:
 
   * `/eligibility`
   * `/startgiveaways`
   * `/stopgiveaways`
   * `/setgiveawaychannel`
+  * `/setwinnerlog`
   * `/drawnow`
   * `/resetwinners`
 
@@ -32,6 +37,82 @@ Users must:
 * Have held **Striker continuously ≥ MIN_DAYS_WITH_STRIKER_ROLE**
 
 If Striker is removed, the timer resets.
+
+---
+
+## Giveaway Flow
+
+1. Scheduler selects eligible users
+2. Winner is stored in PostgreSQL
+3. Case animation posts in giveaway channel
+4. Users can press **Replay**
+5. Replay is:
+
+   * private (only clicker sees it)
+   * visual only (no new reward)
+   * anti-spam protected
+6. Optional winner logs are sent to the log channel
+
+---
+
+## Admin Commands
+
+### `/setgiveawaychannel`
+
+Sets where the public case animation is posted.
+
+**Admin only**
+
+---
+
+### `/setwinnerlog`
+
+Sets where internal winner logs are sent.
+
+**Admin only**
+
+---
+
+### `/startgiveaways`
+
+Enables scheduled draws.
+
+**Admin only**
+
+---
+
+### `/stopgiveaways`
+
+Disables scheduled draws.
+
+**Admin only**
+
+---
+
+### `/drawnow`
+
+Forces an immediate draw.
+
+**Admin only**
+
+---
+
+### `/resetwinners`
+
+Reset winner history.
+
+Options:
+
+* `today`
+* `all`
+
+**Admin only**
+
+---
+
+### `/eligibility`
+
+Check if a user qualifies for giveaways.
 
 ---
 
@@ -54,14 +135,14 @@ If Striker is removed, the timer resets.
 4. Railway will create `DATABASE_URL` automatically
 5. Add Variables in Railway:
 
-Required:
+### Required
 
 * `BOT_TOKEN`
 * `DATABASE_URL`
 * `TIME_WINDOWS_JSON`
 * `GUILD_ID`
 
-Recommended:
+### Recommended
 
 * `STRIKER_ROLE_ID` or `STRIKER_ROLE_NAME`
 * `LEVEL5_ROLE_ID` or `LEVEL5_ROLE_NAME`
@@ -72,7 +153,7 @@ Recommended:
 * `GIVEAWAY_MESSAGE`
 * `GIVEAWAY_COLOR`
 
-Optional:
+### Optional
 
 * cooldown settings
 * message requirements
@@ -85,22 +166,10 @@ Optional:
 
 Edit in `config.js`:
 
-```
+```js
 PRIZES: [
   { name: "Small Reward", emoji: "🪙", weight: 60 },
   { name: "Medium Reward", emoji: "💵", weight: 25 },
   { name: "Big Reward", emoji: "💎", weight: 10 },
   { name: "JACKPOT", emoji: "🔥", weight: 5 }
 ]
-```
-
-Higher weight = higher drop chance.
-
----
-
-## Discord Developer Portal
-
-Enable intents:
-
-* Server Members Intent
-* Message Content Intent
