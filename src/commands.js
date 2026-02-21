@@ -1,4 +1,11 @@
-const { SlashCommandBuilder, REST, Routes, PermissionFlagsBits } = require("discord.js");
+const {
+  SlashCommandBuilder,
+  REST,
+  Routes,
+  PermissionFlagsBits,
+  ChannelType
+} = require("discord.js");
+
 const cfg = require("./config");
 
 function buildCommands() {
@@ -15,14 +22,27 @@ function buildCommands() {
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     new SlashCommandBuilder()
-  .setName("setwinnerlog")
-  .setDescription("Set the winner log channel")
-  .addChannelOption(o =>
-    o.setName("channel")
-      .setDescription("Channel for winner logs")
-      .setRequired(true) 
-  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-                    
+      .setName("setgiveawaychannel")
+      .setDescription("Set the giveaway channel")
+      .addChannelOption(o =>
+        o.setName("channel")
+          .setDescription("Channel where winners are posted")
+          .setRequired(true)
+          .addChannelTypes(ChannelType.GuildText)
+      )
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+    new SlashCommandBuilder()
+      .setName("setwinnerlog")
+      .setDescription("Set the winner log channel")
+      .addChannelOption(o =>
+        o.setName("channel")
+          .setDescription("Channel for winner logs")
+          .setRequired(true)
+          .addChannelTypes(ChannelType.GuildText)
+      )
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
     new SlashCommandBuilder()
       .setName("drawnow")
       .setDescription("Draw a winner now")
@@ -38,15 +58,14 @@ function buildCommands() {
       )
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-    // ✅ NEW: eligibility command
     new SlashCommandBuilder()
-  .setName("eligibility")
-  .setDescription("Check a user's giveaway eligibility")
-  .addUserOption(o =>
-    o.setName("user")
-      .setDescription("User to check")
-      .setRequired(false) // optional so they can check themselves
-  ),
+      .setName("eligibility")
+      .setDescription("Check a user's giveaway eligibility")
+      .addUserOption(o =>
+        o.setName("user")
+          .setDescription("User to check")
+          .setRequired(false)
+      ),
 
   ].map(cmd => cmd.toJSON());
 }
