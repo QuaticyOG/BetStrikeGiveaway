@@ -31,6 +31,21 @@ function pickWeightedPrize(prizes = []) {
   return prizes[0];
 }
 
+
+/* ------------------------------------------------ */
+/*                 DATE AND TIME LOG                */
+/* ------------------------------------------------ */
+
+function nowOsloTime() {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Oslo",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).format(new Date());
+}
+
 /* ------------------------------------------------ */
 /*                 PREMIUM REEL HELPERS             */
 /* ------------------------------------------------ */
@@ -376,13 +391,14 @@ const logChannel = logChannelId
 
 if (logChannel) {
   try {
-    await logChannel.send({
-      content:
-        `🏆 **Winner Drawn**\n` +
-        `User: <@${winner.id}>\n` +
-        `Prize: ${prize.emoji} **${prize.name}**\n` +
-        `Date: ${winDateUTC}`
-    });
+await logChannel.send({
+  content:
+    `🏆 **Winner Drawn**\n` +
+    `User: <@${winner.id}>\n` +
+    `Prize: ${prize.emoji} **${prize.name}**\n` +
+    `Date: ${winDateUTC}\n` +
+    `Time: ${nowOsloTime()} UTC+1`
+});
   } catch (err) {
     console.error("Failed to send winner log:", err);
   }
