@@ -1,15 +1,15 @@
 // src/giveaway.js
 const {
-ActionRowBuilder,
-ButtonBuilder,
-ButtonStyle
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
 } = require("discord.js");
 const db = require("./db");
 const cfg = require("./config");
 const { isEligible } = require("./eligibility");
 
 function todayISODateUTC() {
-return new Date().toISOString().slice(0, 10);
+  return new Date().toISOString().slice(0, 10);
 }
 
 /* ------------------------------------------------ */
@@ -17,172 +17,159 @@ return new Date().toISOString().slice(0, 10);
 /* ------------------------------------------------ */
 
 function pickWeightedPrize(prizes = []) {
-if (!Array.isArray(prizes) || prizes.length === 0) {
-throw new Error("PRIZES config is missing or empty");
-}
+  if (!Array.isArray(prizes) || prizes.length === 0) {
+    throw new Error("PRIZES config is missing or empty");
+  }
 
-const total = prizes.reduce((sum, p) => sum + p.weight, 0);
-let roll = Math.random() * total;
+  const total = prizes.reduce((sum, p) => sum + p.weight, 0);
+  let roll = Math.random() * total;
 
-for (const prize of prizes) {
-if (roll < prize.weight) return prize;
-roll -= prize.weight;
-}
-return prizes[0];
+  for (const prize of prizes) {
+    if (roll < prize.weight) return prize;
+    roll -= prize.weight;
+  }
+  return prizes[0];
 }
 
 /* ------------------------------------------------ */
 /*                 CASE ANIMATION                   */
 /* ------------------------------------------------ */
 
-const POINTER_TOP = "▼";
-const POINTER_BOTTOM = "▲";
-
 function sleep(ms) {
-return new Promise(r => setTimeout(r, ms));
+  return new Promise(r => setTimeout(r, ms));
 }
 
-// 🔥 7-slot reel for proper centering
+// 7-slot reel for proper centering
 function randomRow(emojis) {
-return Array.from({ length: 7 }, () =>
-emojis[Math.floor(Math.random() * emojis.length)]
-).join(" ");
+  return Array.from({ length: 7 }, () =>
+    emojis[Math.floor(Math.random() * emojis.length)]
+  ).join(" ");
 }
 
 function buildSpinner(row) {
-return (
-"``" + "\n" +
-    "           ▼\n" +     `${row}\n` +
+  return (
+    "```\n" +
+    "           ▼\n" +
+    row + "\n" +
     "           ▲\n" +
-    "``"
-);
+    "```"
+  );
 }
 
 async function runCaseAnimation(channel, winner, prize) {
-const spinEmojis = cfg.PRIZES.map(p => p.emoji);
-const replayId = `replay_${winner.id}_${Date.now()}`;
+  const spinEmojis = cfg.PRIZES.map(p => p.emoji);
+  const replayId = `replay_${winner.id}_${Date.now()}`;
 
-const msg = await channel.send({
-content: "🎰 Surprise Betstrike Case..."
-});
+  const msg = await channel.send({
+    content: "🎰 Surprise Betstrike Case..."
+  });
 
-// ---------- PUBLIC SPIN ----------
-async function playPublicAnimation() {
-// fast spin
-for (let i = 0; i < 8; i++) {
-const row = randomRow(spinEmojis);
-await msg.edit(
-`🎰 Surprise Betstrike Case...\n\n` +
-buildSpinner(row)
-);
-await sleep(120);
-}
+  // ---------- PUBLIC SPIN ----------
+  async function playPublicAnimation() {
+    // fast spin
+    for (let i = 0; i < 8; i++) {
+      const row = randomRow(spinEmojis);
+      await msg.edit(
+        `🎰 Surprise Betstrike Case...\n\n${buildSpinner(row)}`
+      );
+      await sleep(120);
+    }
 
-```
-// slow spin
-for (let i = 0; i < 4; i++) {
-  const row = randomRow(spinEmojis);
-  await msg.edit(
-    `🎰 Surprise Betstrike Case...\n\n` +
-    buildSpinner(row)
-  );
-  await sleep(250);
-}
+    // slow spin
+    for (let i = 0; i < 4; i++) {
+      const row = randomRow(spinEmojis);
+      await msg.edit(
+        `🎰 Surprise Betstrike Case...\n\n${buildSpinner(row)}`
+      );
+      await sleep(250);
+    }
 
-// 🔥 TRUE CENTERED FINAL ROW
-const finalRowArray = Array.from({ length: 7 }, () =>
-  spinEmojis[Math.floor(Math.random() * spinEmojis.length)]
-);
+    // TRUE CENTERED FINAL ROW
+    const finalRowArray = Array.from({ length: 7 }, () =>
+      spinEmojis[Math.floor(Math.random() * spinEmojis.length)]
+    );
 
-// force prize to center slot
-finalRowArray[3] = prize.emoji;
+    // force prize to center slot
+    finalRowArray[3] = prize.emoji;
+    const finalRow = finalRowArray.join(" ");
 
-const finalRow = finalRowArray.join(" ");
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(replayId)
+        .setLabel("Replay")
+        .setStyle(ButtonStyle.Secondary)
+    );
 
-const row = new ActionRowBuilder().addComponents(
-  new ButtonBuilder()
-    .setCustomId(replayId)
-    .setLabel("Replay")
-    .setStyle(ButtonStyle.Secondary)
-);
-
-await msg.edit({
-  content:
-```
-
-`🎉 **<@${winner.id}> just got rewarded ${prize.emoji} **${prize.name}** for rocking the Betstrike tag 🔥**
+    await msg.edit({
+      content: `
+<@${winner.id}> just got rewarded ${prize.emoji} **${prize.name}** for rocking the Betstrike tag 🔥
 
 > 🎰 **Betstrike Case**
 > ${buildSpinner(finalRow)}
 
-Stay active. Keep the tag. Win anytime. <a:emoji_name:1473066768749822004>`,
-components: [row]
-});
-}
+Stay active. Keep the tag. Win anytime. <a:emoji_name:1473066768749822004>
+`,
+      components: [row]
+    });
+  }
 
-await playPublicAnimation();
+  await playPublicAnimation();
 
-/* ------------------------------------------------ */
-/*                  REPLAY HANDLER                  */
-/* ------------------------------------------------ */
+  /* ------------------------------------------------ */
+  /*                  REPLAY HANDLER                  */
+  /* ------------------------------------------------ */
 
-const collector = msg.createMessageComponentCollector({
-time: 5 * 60 * 1000
-});
-
-collector.on("collect", async interaction => {
-if (interaction.customId !== replayId) return;
-
-```
-// only winner can replay
-if (interaction.user.id !== winner.id) {
-  return interaction.reply({
-    content: "Only the winner can replay this case.",
-    ephemeral: true
+  const collector = msg.createMessageComponentCollector({
+    time: 5 * 60 * 1000
   });
-}
 
-await interaction.reply({
-  content: "🎰 Replaying your case...",
-  ephemeral: true
-});
+  collector.on("collect", async interaction => {
+    if (interaction.customId !== replayId) return;
 
-// private fast spin
-for (let i = 0; i < 6; i++) {
-  const row = randomRow(spinEmojis);
+    // only winner can replay
+    if (interaction.user.id !== winner.id) {
+      return interaction.reply({
+        content: "Only the winner can replay this case.",
+        ephemeral: true
+      });
+    }
 
-  await interaction.editReply(
-    `🎰 Replaying your case...\n\n` +
-    buildSpinner(row)
-  );
+    await interaction.reply({
+      content: "🎰 Replaying your case...",
+      ephemeral: true
+    });
 
-  await sleep(120);
-}
+    // private fast spin
+    for (let i = 0; i < 6; i++) {
+      const row = randomRow(spinEmojis);
 
-// private final landing
-const finalRowArray = Array.from({ length: 7 }, () =>
-  spinEmojis[Math.floor(Math.random() * spinEmojis.length)]
-);
+      await interaction.editReply(
+        `🎰 Replaying your case...\n\n${buildSpinner(row)}`
+      );
 
-finalRowArray[3] = prize.emoji;
-const finalRow = finalRowArray.join(" ");
+      await sleep(120);
+    }
 
-await interaction.editReply(
-  `🎰 **Replay Result**\n\n` +
-  buildSpinner(finalRow) +
-  `\n\n🏆 You won: ${prize.emoji} **${prize.name}**`
-);
-```
+    // private final landing
+    const finalRowArray = Array.from({ length: 7 }, () =>
+      spinEmojis[Math.floor(Math.random() * spinEmojis.length)]
+    );
 
-});
+    finalRowArray[3] = prize.emoji;
+    const finalRow = finalRowArray.join(" ");
 
-collector.on("end", async () => {
-try {
-await msg.edit({ components: [] });
-} catch {}
-});
+    await interaction.editReply(
+      `🎰 **Replay Result**\n\n${buildSpinner(finalRow)}\n\n🏆 You won: ${prize.emoji} **${prize.name}**`
+    );
+  });
 
-return msg;
+  collector.on("end", async () => {
+    try {
+      await msg.edit({ components: [] });
+    } catch {}
+  });
+
+  return msg;
 }
 
 /* ------------------------------------------------ */
@@ -190,78 +177,88 @@ return msg;
 /* ------------------------------------------------ */
 
 async function getOrCreateConfig(guildId) {
-await db.query(
-"INSERT INTO bot_config (guild_id) VALUES ($1) ON CONFLICT (guild_id) DO NOTHING",
-[guildId]
-);
-const res = await db.query("SELECT * FROM bot_config WHERE guild_id=$1", [guildId]);
-return res.rows[0];
+  await db.query(
+    "INSERT INTO bot_config (guild_id) VALUES ($1) ON CONFLICT (guild_id) DO NOTHING",
+    [guildId]
+  );
+  const res = await db.query(
+    "SELECT * FROM bot_config WHERE guild_id=$1",
+    [guildId]
+  );
+  return res.rows[0];
 }
 
 async function setGiveawaysRunning(guildId, running) {
-await db.query(
-"INSERT INTO bot_config (guild_id, giveaways_running) VALUES ($1,$2) " +
-"ON CONFLICT (guild_id) DO UPDATE SET giveaways_running=EXCLUDED.giveaways_running, updated_at=NOW()",
-[guildId, running]
-);
+  await db.query(
+    "INSERT INTO bot_config (guild_id, giveaways_running) VALUES ($1,$2) " +
+      "ON CONFLICT (guild_id) DO UPDATE SET giveaways_running=EXCLUDED.giveaways_running, updated_at=NOW()",
+    [guildId, running]
+  );
 }
 
 async function setGiveawayChannel(guildId, channelId) {
-await db.query(
-"INSERT INTO bot_config (guild_id, giveaway_channel_id) VALUES ($1,$2) " +
-"ON CONFLICT (guild_id) DO UPDATE SET giveaway_channel_id=EXCLUDED.giveaway_channel_id, updated_at=NOW()",
-[guildId, channelId]
-);
+  await db.query(
+    "INSERT INTO bot_config (guild_id, giveaway_channel_id) VALUES ($1,$2) " +
+      "ON CONFLICT (guild_id) DO UPDATE SET giveaway_channel_id=EXCLUDED.giveaway_channel_id, updated_at=NOW()",
+    [guildId, channelId]
+  );
 }
 
 async function setWinnersLogChannel(guildId, channelId) {
-await db.query(
-"INSERT INTO bot_config (guild_id, log_channel_id) VALUES ($1,$2) " +
-"ON CONFLICT (guild_id) DO UPDATE SET log_channel_id=EXCLUDED.log_channel_id, updated_at=NOW()",
-[guildId, channelId]
-);
+  await db.query(
+    "INSERT INTO bot_config (guild_id, log_channel_id) VALUES ($1,$2) " +
+      "ON CONFLICT (guild_id) DO UPDATE SET log_channel_id=EXCLUDED.log_channel_id, updated_at=NOW()",
+    [guildId, channelId]
+  );
 }
 
 function findEligibleRole(guild) {
-if (cfg.ELIGIBLE_ROLE_ID) return guild.roles.cache.get(cfg.ELIGIBLE_ROLE_ID) || null;
-return guild.roles.cache.find(r => r.name === cfg.ELIGIBLE_ROLE_NAME) || null;
+  if (cfg.ELIGIBLE_ROLE_ID)
+    return guild.roles.cache.get(cfg.ELIGIBLE_ROLE_ID) || null;
+
+  return guild.roles.cache.find(
+    r => r.name === cfg.ELIGIBLE_ROLE_NAME
+  ) || null;
 }
 
 async function hasWonToday(guildId, userId, winDateUTC) {
-const res = await db.query(
-"SELECT 1 FROM daily_winners WHERE guild_id=$1 AND user_id=$2 AND win_date=$3::date",
-[guildId, userId, winDateUTC]
-);
-return res.rowCount > 0;
+  const res = await db.query(
+    "SELECT 1 FROM daily_winners WHERE guild_id=$1 AND user_id=$2 AND win_date=$3::date",
+    [guildId, userId, winDateUTC]
+  );
+  return res.rowCount > 0;
 }
 
 async function hasWonWithinCooldown(guildId, userId, cooldownDays) {
-if (!cooldownDays || cooldownDays <= 0) return false;
+  if (!cooldownDays || cooldownDays <= 0) return false;
 
-const res = await db.query(
-`SELECT 1 FROM daily_winners
+  const res = await db.query(
+    `SELECT 1 FROM daily_winners
      WHERE guild_id=$1
        AND user_id=$2
        AND win_date >= (CURRENT_DATE - ($3::int * INTERVAL '1 day'))
      LIMIT 1`,
-[guildId, userId, cooldownDays]
-);
+    [guildId, userId, cooldownDays]
+  );
 
-return res.rowCount > 0;
+  return res.rowCount > 0;
 }
 
 async function resetWinners(guildId, scope = "today") {
-if (scope === "all") {
-const res = await db.query("DELETE FROM daily_winners WHERE guild_id=$1", [guildId]);
-return { deleted: "all", rows: res.rowCount };
-}
+  if (scope === "all") {
+    const res = await db.query(
+      "DELETE FROM daily_winners WHERE guild_id=$1",
+      [guildId]
+    );
+    return { deleted: "all", rows: res.rowCount };
+  }
 
-const winDateUTC = todayISODateUTC();
-const res = await db.query(
-"DELETE FROM daily_winners WHERE guild_id=$1 AND win_date=$2::date",
-[guildId, winDateUTC]
-);
-return { deleted: "today", rows: res.rowCount, winDateUTC };
+  const winDateUTC = todayISODateUTC();
+  const res = await db.query(
+    "DELETE FROM daily_winners WHERE guild_id=$1 AND win_date=$2::date",
+    [guildId, winDateUTC]
+  );
+  return { deleted: "today", rows: res.rowCount, winDateUTC };
 }
 
 /* ------------------------------------------------ */
@@ -269,54 +266,67 @@ return { deleted: "today", rows: res.rowCount, winDateUTC };
 /* ------------------------------------------------ */
 
 async function pickWinner(client, guild) {
-const conf = await getOrCreateConfig(guild.id);
-if (!conf.giveaways_running) return { winner: null, reason: "Giveaways are stopped." };
+  const conf = await getOrCreateConfig(guild.id);
+  if (!conf.giveaways_running)
+    return { winner: null, reason: "Giveaways are stopped." };
 
-const winDateUTC = todayISODateUTC();
-const role = findEligibleRole(guild);
-if (!role) return { winner: null, reason: "Eligible role not found." };
+  const winDateUTC = todayISODateUTC();
+  const role = findEligibleRole(guild);
+  if (!role)
+    return { winner: null, reason: "Eligible role not found." };
 
-if (role.members.size === 0) {
-try {
-await guild.members.fetch();
-} catch (e) {
-console.error("Member cache warm failed:", e);
-return { winner: null, reason: "Member cache warming." };
-}
-}
+  if (role.members.size === 0) {
+    try {
+      await guild.members.fetch();
+    } catch (e) {
+      console.error("Member cache warm failed:", e);
+      return { winner: null, reason: "Member cache warming." };
+    }
+  }
 
-const eligible = [];
-for (const [, member] of role.members) {
-if (await hasWonToday(guild.id, member.id, winDateUTC)) continue;
-if (await hasWonWithinCooldown(guild.id, member.id, cfg.WIN_COOLDOWN_DAYS)) continue;
-if (await isEligible(member)) eligible.push(member);
-}
+  const eligible = [];
+  for (const [, member] of role.members) {
+    if (await hasWonToday(guild.id, member.id, winDateUTC)) continue;
+    if (
+      await hasWonWithinCooldown(
+        guild.id,
+        member.id,
+        cfg.WIN_COOLDOWN_DAYS
+      )
+    )
+      continue;
+    if (await isEligible(member)) eligible.push(member);
+  }
 
-if (eligible.length === 0) return { winner: null, reason: "No eligible members found." };
+  if (eligible.length === 0)
+    return { winner: null, reason: "No eligible members found." };
 
-const winner = eligible[Math.floor(Math.random() * eligible.length)];
+  const winner =
+    eligible[Math.floor(Math.random() * eligible.length)];
 
-await db.query(
-"INSERT INTO daily_winners (guild_id,user_id,win_date) VALUES ($1,$2,$3::date) ON CONFLICT DO NOTHING",
-[guild.id, winner.id, winDateUTC]
-);
+  await db.query(
+    "INSERT INTO daily_winners (guild_id,user_id,win_date) VALUES ($1,$2,$3::date) ON CONFLICT DO NOTHING",
+    [guild.id, winner.id, winDateUTC]
+  );
 
-const publicChannelId = conf.giveaway_channel_id;
-const publicChannel = publicChannelId ? guild.channels.cache.get(publicChannelId) : null;
+  const publicChannelId = conf.giveaway_channel_id;
+  const publicChannel = publicChannelId
+    ? guild.channels.cache.get(publicChannelId)
+    : null;
 
-if (publicChannel) {
-const prize = pickWeightedPrize(cfg.PRIZES);
-await runCaseAnimation(publicChannel, winner, prize);
-}
+  if (publicChannel) {
+    const prize = pickWeightedPrize(cfg.PRIZES);
+    await runCaseAnimation(publicChannel, winner, prize);
+  }
 
-return { winner, reason: null };
+  return { winner, reason: null };
 }
 
 module.exports = {
-getOrCreateConfig,
-setGiveawaysRunning,
-setGiveawayChannel,
-setWinnersLogChannel,
-pickWinner,
-resetWinners
+  getOrCreateConfig,
+  setGiveawaysRunning,
+  setGiveawayChannel,
+  setWinnersLogChannel,
+  pickWinner,
+  resetWinners
 };
