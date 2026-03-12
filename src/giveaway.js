@@ -113,9 +113,9 @@ async function runCaseAnimation(channel, winner, prize) {
   const activeReplays = new Set();
 
   // customize these if you change case emoji / thumbnail
-  const CASE_EMOJI = "<:case:1474816589659504701>";
-  const CASE_THUMB = "https://cdn.discordapp.com/emojis/1474816589659504701.png";
-  const CASEOPEN_THUMB = "https://cdn.discordapp.com/emojis/1474829744544419933.png";
+  const CASE_EMOJI = "<:case:1481719575023194205>";
+  const CASE_THUMB = "https://cdn.discordapp.com/emojis/1481719575023194205.png";
+  const CASEOPEN_THUMB = "https://cdn.discordapp.com/emojis/1481720486088933436.png";
 
   const msg = await channel.send({
     content: `Sudden Case Opening!`
