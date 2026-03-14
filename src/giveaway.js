@@ -171,7 +171,7 @@ async function runCaseAnimation(channel, winner, prize) {
       .setColor("#A26BFF")
       .setTitle("Betstrike Case Opened!")
       .setDescription(
-        `<@${winner.id}> just got rewarded ${prize.emoji} **${prize.name}** for rocking the Betstrike tag 🔥\n\n` +
+        `<@${winner.id}> (${winner.displayName}) just got rewarded ${prize.emoji} **${prize.name}** for rocking the Betstrike tag 🔥\n\n` +
           asBlockquote(buildSpinner(sharedFinalRowGlowed)) +
           `\n\nStay active. Keep the tag. Win anytime.`
       )
