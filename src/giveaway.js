@@ -172,10 +172,12 @@ async function runCaseAnimation(channel, winner, prize) {
       .setColor("#A26BFF")
       .setTitle("Betstrike Case Opened!")
       .setDescription(
-        `<@${winner.id}> (${winner.displayName}) just got rewarded ${prize.emoji} **${prize.name}** for rocking the Betstrike tag 🔥` +
-          asBlockquote(buildSpinner(sharedFinalRowGlowed)) +
-          `Stay active. Keep the tag. Win anytime.`+
-          `⏳ **Please DM <@514907983512207362> (${claimUser.username}) within 24 hours to claim your prize.**`
+      `<@${winner.id}> (${winner.displayName}) just got rewarded ${prize.emoji} **${prize.name}** for rocking the Betstrike tag 🔥
+
+      ${buildSpinner(sharedFinalRowGlowed)}
+
+      Stay active. Keep the tag. Win anytime.
+      ⏳ Please DM <@514907983512207362> (Emad) within 24 hours to claim your prize.`
       )
       .setThumbnail(CASEOPEN_THUMB);
 
