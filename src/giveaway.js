@@ -108,6 +108,7 @@ function glowCenter(row) {
 async function runCaseAnimation(channel, winner, prize) {
   const spinEmojis = cfg.PRIZES.map(p => p.emoji);
   const replayId = `replay_${winner.id}_${Date.now()}`;
+  const claimUser = await channel.client.users.fetch("514907983512207362");
 
   // anyone can replay, but prevent each user from multi-click spamming
   const activeReplays = new Set();
@@ -173,8 +174,8 @@ async function runCaseAnimation(channel, winner, prize) {
       .setDescription(
         `<@${winner.id}> (${winner.displayName}) just got rewarded ${prize.emoji} **${prize.name}** for rocking the Betstrike tag 🔥` +
           asBlockquote(buildSpinner(sharedFinalRowGlowed)) +
-          `Stay active. Keep the tag. Win anytime.`
-          `⏳ **Please DM <@514907983512207362> within 24 hours to claim your prize.**`
+          `Stay active. Keep the tag. Win anytime.`+
+          `⏳ **Please DM <@514907983512207362> (${claimUser.username}) within 24 hours to claim your prize.**`
       )
       .setThumbnail(CASEOPEN_THUMB);
 
